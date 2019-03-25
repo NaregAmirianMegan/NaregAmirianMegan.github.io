@@ -1,20 +1,607 @@
 <!DOCTYPE html>
-<html lang="">
-  <head>
+<!--[if lt IE 9 ]><html class="no-js oldie" lang="en"> <![endif]-->
+<!--[if IE 9 ]><html class="no-js oldie ie9" lang="en"> <![endif]-->
+<!--[if (gte IE 9)|!(IE)]><!-->
+<html class="no-js" lang="en">
+<!--<![endif]-->
+
+<head>
+
+    <!--- basic page needs
+    ================================================== -->
+    <meta charset="utf-8">
     <title>Nareg Megan</title>
-    <!-- Latest compiled and minified CSS -->
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <meta name="description" content="Personal Website">
+    <meta name="author" content="Nareg A. Megan">
 
-    <!-- jQuery library -->
+    <!-- mobile specific metas
+    ================================================== -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CSS
+    ================================================== -->
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/vendor.css">
+    <link rel="stylesheet" href="css/main.css">
+
+    <!-- script
+    ================================================== -->
+    <script src="js/modernizr.js"></script>
+    <script src="js/pace.min.js"></script>
+
+    <script src="front-end/p5/p5.min.js"></script>
+    <script src="front-end/p5/addons/p5.dom.min.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="js/sketch.js"></script>
+    <script src="js/dot.js"></script>
 
-    <!-- Popper JS -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <!-- favicons
+    ================================================== -->
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
 
-    <!-- Latest compiled JavaScript -->
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
-  </head>
-  <body>
-    <p>Hello World</p>
-  </body>
+</head>
+
+<body id="top">
+
+    <!-- header
+    ================================================== -->
+    <header class="s-header">
+
+        <!-- <div class="header-logo">
+            <a class="site-logo" href="index.html"><img src="images/logo.png" alt="Homepage"></a>
+        </div> -->
+
+        <nav class="header-nav-wrap">
+            <ul class="header-nav">
+                <li class="current"><a class="smoothscroll"  href="#home" title="home">Home</a></li>
+                <li><a class="smoothscroll"  href="#about" title="about">About</a></li>
+                <li><a class="smoothscroll"  href="#education" title="works">Education</a></li>
+                <li><a class="smoothscroll"  href="#experience" title="blog">Experience</a></li>
+                <li><a class="smoothscroll"  href="#projects" title="contact">Projects</a></li>
+                <li><a class="smoothscroll"  href="#contact" title="contact">Contact</a></li>
+            </ul>
+        </nav>
+
+        <a class="header-menu-toggle" href="#0"><span>Menu</span></a>
+
+    </header> <!-- end s-header -->
+
+
+   <!-- home
+   ================================================== -->
+   <section id="home" class="s-home page-hero target-section" data-parallax="scroll" data-image-src="images/background.jpg" data-natural-width=3000 data-natural-height=2000 data-position-y=center>
+
+        <div class="overlay"></div>
+        <div class="shadow-overlay"></div>
+
+        <div class="home-content">
+
+            <div class="row home-content__main">
+
+                <h3>Hey</h3>
+
+                <h1>
+                    I'm Nareg. <br>
+                </h1>
+
+                <div class="home-content__buttons">
+                    <a href="#about" class="smoothscroll btn btn--stroke">
+                        About Me
+                    </a>
+                    <a href="#education" class="smoothscroll btn btn--stroke">
+                        Education
+                    </a>
+                    <a href="#experience" class="smoothscroll btn btn--stroke">
+                        Experience
+                    </a>
+                    <a href="#projects" class="smoothscroll btn btn--stroke">
+                        Projects
+                    </a>
+                    <a href="#contact" class="smoothscroll btn btn--stroke">
+                        Contact Me
+                    </a>
+                </div>
+
+                <div class="home-content__scroll">
+                    <a href="#about" class="scroll-link smoothscroll">
+                        <span>Scroll Down</span>
+                    </a>
+                </div>
+
+            </div>
+
+        </div> <!-- end home-content -->
+
+        <ul class="home-social">
+          <li>
+              <a href="mailto:nmegan@berkeley.edu"><i class="im im-mail" aria-hidden="true"></i><span>Email</span></a>
+          </li>
+          <li>
+              <a href="https://github.com/NaregAmirianMegan"><i class="im im-github" aria-hidden="true"></i><span>Github</span></a>
+          </li>
+          <li>
+              <a href="https://www.linkedin.com/in/nareg-megan"><i class="im im-linkedin" aria-hidden="true"></i><span>LinkedIn</span></a>
+          </li>
+        </ul>
+        <!-- end home-social -->
+
+    </section> <!-- end s-home -->
+
+
+    <!-- about
+    ================================================== -->
+    <section id="about" class="s-about target-section">
+
+        <div class="row narrow section-intro has-bottom-sep">
+            <div class="col-full text-center">
+              <img class="prof_pic" src="images/prof_pic.png" alt="Profile Picture">
+                <h3>About</h3>
+                <h1>About Me</h1>
+                <p class="lead">I'm a computer science and applied math major at UC Berkeley interested in a variety of STEM related topics including software/hardware development and the lower level concepts underlying technology like mathematics and chemistry. I also like working out, playing basketball, and watching movies and tv!</p>
+            </div>
+        </div>
+
+        <div class="row about-content">
+
+            <div class="col-six tab-full left">
+                <h3>Overview</h3>
+
+                <p>I grew up in Madison, Wisconsin where I went to Middleton High School. My first name, Nareg (pronounced like Nah-dehg), is Armenian, and my last name, Megan (pronounced with a long e), is Irish. Thus, my name is half Armenian and half Irish, like me!</p>
+
+                <p>My interest in STEM fields started in elementary school and has been increasing ever since then; exploring and creating new technologies has and always will be a passion and a passtime for me. I also love learning how things (STEM related or not) work in general (Youtube tutorials take up a lot of my time).</p>
+            </div>
+
+            <div class="col-six tab-full right">
+                <h3>Skills.</h3>
+
+                <ul class="skill-bars">
+                    <li>
+                    <div class="progress percent90"><span>90%</span></div>
+                    <strong>Python</strong>
+                    </li>
+                    <li>
+                    <div class="progress percent85"><span>85%</span></div>
+                    <strong>Java</strong>
+                    </li>
+                    <li>
+                    <div class="progress percent75"><span>75%</span></div>
+                    <strong>AI/ML (Algorithms and Libraries)</strong>
+                    </li>
+                    <li>
+                    <div class="progress percent70"><span>70%</span></div>
+                    <strong>Data Managament and Analysis</strong>
+                    </li>
+                    <li>
+                    <div class="progress percent65"><span>65%</span></div>
+                    <strong>JavaScript/CSS/HTML</strong>
+                    </li>
+                    <li>
+                    <div class="progress percent65"><span>65%</span></div>
+                    <strong>Quant/Qual Financial Analysis</strong>
+                    </li>
+                </ul>
+            </div>
+
+        </div> <!-- end about-content -->
+
+    </section> <!-- end about -->
+
+    <section id="education" class="s-about target-section">
+      <div class="row about-content about-content--timeline">
+
+          <div class="col-full text-center">
+              <h1>Education and Organizations</h1>
+          </div>
+
+          <div class="col-six tab-full left">
+              <div class="timeline">
+
+                <div class="timeline__block">
+                    <div class="timeline__bullet"></div>
+                    <div class="timeline__header">
+                        <p class="timeline__timeframe">August 2018 - Present</p>
+                        <h3>University of California, Berkeley</h3>
+                        <h5>Undergraduate Computer Science and Applied Math</h5>
+                    </div>
+                    <div class="timeline__desc">
+                        <p>Relavent Coursework: </br> - CS 61A (Structure and Interpretation of Computer Programs) </br> - CS 61B (Data Structures) </br> - CS 70 (Discrete Math and Probability Theory) </br> - Integrative Biology 35AC (Human Biological Variation) </br> - Math 53 (Multivariable Calculus) </br> - Chemistry 1A</p>
+                    </div>
+                </div> <!-- end timeline__block -->
+
+                <div class="timeline__block">
+                    <div class="timeline__bullet"></div>
+                    <div class="timeline__header">
+                        <p class="timeline__timeframe">September 2017 - May 2018</p>
+                        <h3>University of Wisconsin, Madison</h3>
+                        <h5>Undergraduate Classes</h5>
+                    </div>
+                    <div class="timeline__desc">
+                        <p>Relevant Coursework: </br> CS 300 (Programming II) </br> CS 400 (Programming III) </br></br> These classes were taught in Java and covered topics including data structures (Linked Lists, Stacks/Queues, Trees and balancing, Heaps, Graphs, and Hashing), lambda functions, functional interfaces, unit tests, and space/time complexities.</p>
+                    </div>
+                </div> <!-- end timeline__block -->
+
+                <div class="timeline__block">
+                    <div class="timeline__bullet"></div>
+                    <div class="timeline__header">
+                        <p class="timeline__timeframe">September 2014 - May 2018</p>
+                        <h3>Middleton High School</h3>
+                        <h5>High School Degree</h5>
+                    </div>
+                    <div class="timeline__desc">
+                        <p>Coursework: </br> AP Computer Science, AP Chemistry, AP Physics, AP Psychology, AP Calculus (AB/BC), AP Language and Composition, AP Literature.</p>
+                    </div>
+                </div> <!-- end timeline__block -->
+
+              </div> <!-- end timeline -->
+          </div> <!-- end left -->
+
+          <div class="col-six tab-full right">
+              <div class="timeline">
+
+                  <div class="timeline__block">
+                      <div class="timeline__bullet"></div>
+                      <div class="timeline__header">
+                          <p class="timeline__timeframe">February 2019 - Present</p>
+                          <h3>Cal Launchpad</h3>
+                          <h5>Developer</h5>
+                      </div>
+                      <div class="timeline__desc">
+                          <p><a href="https://callaunchpad.org">Cal Launchpad</a> is an organization at UC Berkeley that develops software based on cutting edge applied machine learning. I'm a developer on the <a href="https://moorjanilab.org/">Moorjani Lab</a> project team. We are working with Moorjani Lab to enhance ancestral genetics tracing with novel ML algorithms. These algorithms could eventually allow us to more accurately trace diseases and understand heritage and adaptation.</p>
+                      </div>
+                  </div> <!-- end timeline__block -->
+
+                  <div class="timeline__block">
+                      <div class="timeline__bullet"></div>
+                      <div class="timeline__header">
+                          <p class="timeline__timeframe">February 2019 - Present</p>
+                          <h3>Open Source at Berkeley</h3>
+                          <h5>Developer</h5>
+                      </div>
+                      <div class="timeline__desc">
+                          <p><a href="https://www.ocf.berkeley.edu/~opensource/">Open Source at Berkeley</a> is a student body at Cal that develops open source software to be distributed to the broader STEM community. My team is working on making quantitative financial data easier to work with so that quant trading becomes more accessible to the public.</p>
+                      </div>
+                  </div> <!-- end timeline__block -->
+
+                  <div class="timeline__block">
+                      <div class="timeline__bullet"></div>
+                      <div class="timeline__header">
+                          <p class="timeline__timeframe">December 2015 - May 2018</p>
+                          <h3>Investment Club</h3>
+                          <h5>Co-President / Co-Founder</h5>
+                      </div>
+                      <div class="timeline__desc">
+                          <p>My responsibilities included gathering initial members, entering the club into different competitions, speaking to potential guest speakers from financial firms in the area, and presenting on topics from options trading to cryptocurrencies. The club participated in multiple financial competitions such as How The Market Works and the Wisconsin Finance/Investment Bowl.</p>
+                      </div>
+                  </div> <!-- end timeline__block -->
+
+              </div> <!-- end timeline -->
+          </div> <!-- end right -->
+
+      </div> <!-- end about-content timeline -->
+    </section>
+
+    <section id="experience" class="s-about target-section">
+      <div class="row about-content about-content--timeline">
+
+          <div class="col-full text-center", id="experience">
+              <h1>Experience</h1>
+          </div>
+
+        <div class="col-6 tab-full left">
+            <div class="timeline">
+
+                <div class="timeline__block">
+                    <div class="timeline__bullet"></div>
+                    <div class="timeline__header">
+                        <p class="timeline__timeframe">February 2019 - Present</p>
+                        <h3>UC Berkeley EECS</h3>
+                        <h5>Academic Intern / Lab Assistant</h5>
+                    </div>
+                    <div class="timeline__desc">
+                        <p>Answer students questions and make sure they understand key concepts during lab and office hours for Computer Science 61A at UC Berkeley. For concept checks, I lead students through problems and help them learn how to think about different types challenges when solving algorithmic puzzles. If students have questions relating to labs, homeworks, projects, or tests I help guide them to the answer of their question.</p>
+                    </div>
+                </div> <!-- end timeline__block -->
+
+                <div class="timeline__block">
+                    <div class="timeline__bullet"></div>
+                    <div class="timeline__header">
+                        <p class="timeline__timeframe">June 2017 - August 2017</p>
+                        <h3>WIPAC</h3>
+                        <h5>Data Analyst</h5>
+                    </div>
+                    <div class="timeline__desc">
+                        <p>The Wisconsin IceCube Particle Astrophysics Center (WIPAC) is an astrophysics lab based out of UW-Madison. They collect and analyze data from the IceCube neutrino detector in the South Pole. My job was to analyze neutrino data (using primarily python) and develop datasets of neutrino “events” that the computer algorithms commonly misclassified (i.e. type, direction, energy, etc. of neutrino). By partitioning misclassified data it allows for improvement of computer classification algorithms as well as new potential discoveries.</p>
+                    </div>
+                </div> <!-- end timeline__block -->
+
+                <div class="timeline__block">
+                    <div class="timeline__bullet"></div>
+                    <div class="timeline__header">
+                        <p class="timeline__timeframe">March 2016 - Present</p>
+                        <h3>Martingilio Martial Arts</h3>
+                        <h5>Instructor</h5>
+                    </div>
+                    <div class="timeline__desc">
+                        <p>Martingilio martial arts is a mixed martial arts studio in Madison, WI. I train at the gym while also instructing students in martial arts including Kempo, Kyusho Jitsu, Jiu Jitsu, Judo, Boxing, and Arnis. I come back to train and teach during the summers.</p>
+                    </div>
+                </div> <!-- end timeline__block -->
+
+            </div> <!-- end timeline -->
+        </div> <!-- end left -->
+      </div>
+
+      <div class="row about-content about-content--buttons">
+
+          <div class="col-twelve tab-full left">
+              <a href="./Nareg-A-Megan-resume.pdf" class="btn btn--primary full-width">Download My Resume</a>
+          </div>
+
+      </div> <!-- end about-content buttons -->
+
+    </section>
+
+
+    <!-- works
+    ================================================== -->
+    <section id="projects" class="s-works target-section">
+
+        <div class="row narrow section-intro has-bottom-sep">
+            <div class="col-full">
+                <h1 style="color: #862121 ! important;">Projects</h1>
+            </div>
+        </div>
+
+          <div class="row">
+
+            <div class="col-sm text-center">
+              <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
+                <div class="card-body d-flex flex-column">
+                  <h4 class="card-title">Java Neural Network Library</h4>
+                  <p class="card-text">A neural network library built from scratch in Java. It is customizable and implements activation functions, momentum and gradient descent. The library also includes an extensive matrix calculation library from which the ANNs are built.</p>
+                  <a href="https://github.com/NaregAmirianMegan/Artificial-Neural-Network" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-sm text-center">
+              <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
+                <div class="card-body">
+                  <h4 class="card-title">Reddit Chatbot</h4>
+                  <p class="card-text">A Neural Machine Translation model built in TensorFlow that essentially translates English to English (like an English conversation). Comment data from Reddit managed in SQLite was used to train the model. Reddit data was also used recently by some of the more advanced NLP models from OpenAI and DeepMind.</p>
+                  <a href="https://github.com/NaregAmirianMegan/reddit-chatbot" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-sm text-center">
+              <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
+                <div class="card-body">
+                  <h4 class="card-title">Atari Breakout ML</h4>
+                  <p class="card-text">I built a simple atari breakout engine and then preprocessed the frames and sent them through a Deep-Q-Learning model to get the computer to play the game. I learned a lot about data preprocessing, image compression, image processing, and light-weight convolutional neural networks for reinforcement learning.</p>
+                  <a href="https://github.com/NaregAmirianMegan/atari-breakout-ML" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
+                </div>
+              </div>
+            </div>
+
+        </div>
+
+        <div class="row">
+
+          <div class="col-sm text-center">
+            <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
+              <div class="card-body">
+                <h4 class="card-title">Star Defense iOS App</h4>
+                <p class="card-text">To gain experience with iOS development I built a variation on space invaders in iOS that uses motion to control the speed and direction of the spacecraft. Through the project I was able to learn about iOS graphics, Swift, and the inner workings of mobile applications.</p>
+                <a href="https://github.com/NaregAmirianMegan/Star-Defense" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-sm text-center">
+            <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
+              <div class="card-body">
+                <h4 class="card-title">Data Scraper</h4>
+                <p class="card-text">A lot of experimental machine learning requires scraping data from the web, whether it be images, stock data, or text. This repository uses Selenium and the requests library to help with this process. The library available on GitHub currently isn't very large, but I'm working on expanding it out to different areas needed in ML like text and numerical data (like for finance).</p>
+                <a href="https://github.com/NaregAmirianMegan/Data-Collector" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-sm text-center">
+            <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
+              <div class="card-body">
+                <h4 class="card-title">RL Trading Bot</h4>
+                <p class="card-text">I’m currently working on applying reinforcement learning to financial trading in small cap stocks, forex, and cryptocurrency. Trading can be thought of as a game (with some pretty severe consequences). But research is showing that RL algorithms are surpassing humans in terms of strategic game play (i.e. atari games, AlphaGo, and AlphaZero). A bot can learn what action is best to take based on hundreds or thousands of input features. (I don't currently have a public repository for this).</p>
+                <!-- <a href="#" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a> -->
+              </div>
+            </div>
+          </div>
+
+      </div>
+
+
+    </section> <!-- Portfolio Section End-->
+
+    <!-- s-stats
+    ================================================== -->
+    <section id="contact" class="s-contact target-section">
+
+        <div class="overlay"></div>
+
+        <div class="row narrow section-intro">
+            <div class="col-full">
+                <h3>Contact</h3>
+                <h1>Email me</h1>
+
+                <p class="lead">about jobs, research, fun facts, whatever! I'd love to get in touch!</p>
+            </div>
+        </div>
+
+        <div class="row contact__main">
+            <div class="col-eight tab-full contact__form">
+                <form name="contactForm" id="contactForm" method="post" action="">
+                    <fieldset>
+
+                    <div class="form-field">
+                        <input name="contactName" type="text" id="contactName" placeholder="Name" value="" minlength="2" required="" aria-required="true" class="full-width">
+                    </div>
+                    <div class="form-field">
+                        <input name="contactEmail" type="email" id="contactEmail" placeholder="Email" value="" required="" aria-required="true" class="full-width">
+                    </div>
+                    <div class="form-field">
+                        <input name="contactSubject" type="text" id="contactSubject" placeholder="Subject" value="" class="full-width">
+                    </div>
+                    <div class="form-field">
+                        <textarea name="contactMessage" id="contactMessage" placeholder="message" rows="10" cols="50" required="" aria-required="true" class="full-width"></textarea>
+                    </div>
+                    <div class="form-field">
+                        <button class="full-width btn--primary">Submit</button>
+                        <div class="submit-loader">
+                            <div class="text-loader">Sending...</div>
+                            <div class="s-loader">
+                                <div class="bounce1"></div>
+                                <div class="bounce2"></div>
+                                <div class="bounce3"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    </fieldset>
+                </form>
+
+                <!-- contact-warning -->
+                <div class="message-warning">
+                    Something went wrong. Please try again.
+                </div>
+
+                <!-- contact-success -->
+                <div class="message-success">
+                    Your message was sent, thank you!<br>
+                </div>
+
+            </div>
+            <div class="col-four tab-full contact__infos">
+                <h4 class="h06">Phone</h4>
+                <p>Phone: (608) 843-7045
+                </p>
+
+                <h4 class="h06">Email</h4>
+                <p>nmegan@berkeley.edu<br>
+                  naregmegan@gmail.com
+                </p>
+
+                <h4 class="h06">Address One</h4>
+                <p>
+                9116 Aspen Grove Lane<br>
+                Madison, WI<br>
+                53717 US
+                </p>
+                <h4 class="h06">Address Two</h4>
+                <p>
+                2401 Durant Avenue<br>
+                Berkeley, CA<br>
+                94704 US
+                </p>
+            </div>
+
+        </div>
+
+    </section> <!-- end s-contact -->
+
+
+    <!-- footer
+    ================================================== -->
+    <footer>
+        <div class="row">
+            <div class="col-full">
+
+                <ul class="footer-social">
+                    <li><a href="#0">
+                        <i class="im im-mail" aria-hidden="true"></i>
+                        <span>Mail</span>
+                    </a></li>
+                    <li><a href="#0">
+                        <i class="im im-github" aria-hidden="true"></i>
+                        <span>Github</span>
+                    </a></li>
+                    <li><a href="#0">
+                        <i class="im im-linkedin" aria-hidden="true"></i>
+                        <span>LinkedIn</span>
+                    </a></li>
+                </ul>
+
+            </div>
+        </div>
+
+        <div class="row footer-bottom">
+
+            <div class="col-twelve">
+                <div class="copyright">
+                    <span>© Copyright Nareg A. Megan 2019</span>
+                    <span>Design by Nareg Megan and <a href="https://www.styleshout.com/">styleshout</a></span>
+                </div>
+
+                <div class="go-top">
+                <a class="smoothscroll" title="Back to Top" href="#top"><i class="im im-arrow-up" aria-hidden="true"></i></a>
+                </div>
+            </div>
+
+        </div> <!-- end footer-bottom -->
+
+    </footer> <!-- end footer -->
+
+
+    <!-- photoswipe background
+    ================================================== -->
+    <div aria-hidden="true" class="pswp" role="dialog" tabindex="-1">
+
+        <div class="pswp__bg"></div>
+        <div class="pswp__scroll-wrap">
+
+            <div class="pswp__container">
+                <div class="pswp__item"></div>
+                <div class="pswp__item"></div>
+                <div class="pswp__item"></div>
+            </div>
+
+            <div class="pswp__ui pswp__ui--hidden">
+                <div class="pswp__top-bar">
+                    <div class="pswp__counter"></div><button class="pswp__button pswp__button--close" title="Close (Esc)"></button> <button class="pswp__button pswp__button--share" title=
+                    "Share"></button> <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button> <button class="pswp__button pswp__button--zoom" title=
+                    "Zoom in/out"></button>
+                    <div class="pswp__preloader">
+                        <div class="pswp__preloader__icn">
+                            <div class="pswp__preloader__cut">
+                                <div class="pswp__preloader__donut"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                    <div class="pswp__share-tooltip"></div>
+                </div><button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)"></button> <button class="pswp__button pswp__button--arrow--right" title=
+                "Next (arrow right)"></button>
+                <div class="pswp__caption">
+                    <div class="pswp__caption__center"></div>
+                </div>
+            </div>
+
+        </div>
+
+    </div><!-- end photoSwipe background -->
+
+    <div id="preloader">
+        <div id="loader"></div>
+    </div>
+
+
+    <!-- Java Script
+    ================================================== -->
+    <script src="js/jquery-3.2.1.min.js"></script>
+    <script src="js/plugins.js"></script>
+    <script src="js/main.js"></script>
+
+</body>
+
 </html>

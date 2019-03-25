@@ -1,28 +1,14 @@
 const dots = [];
-const numDots = 100;
+const numDots = 90;
 const WIDTH = window.innerWidth;
 const HEIGHT = window.innerHeight;
 
 function setup() {
   const cnv = createCanvas(WIDTH, HEIGHT);
-  cnv.mouseClicked(onClick);
+  cnv.position(0, 0);
+  cnv.style('z-index', '-1');
   for(let i = 0; i < numDots;i++) {
     dots.push(new Dot(random(WIDTH), random(HEIGHT)));
-  }
-}
-
-function onClick() {
-  dots.push(new Dot(mouseX, mouseY));
-  numDots++;
-}
-
-function keyPressed() {
-  if(keyCode === ENTER) {
-    const input = document.getElementById('searchBox').value;
-    document.getElementById("output").innerHTML = input;
-  }
-  for(let dot of dots) {
-    dot.pressed = true;
   }
 }
 
@@ -31,14 +17,13 @@ function draw() {
   for(let dot of dots) {
     for(let otherDot of dots) {
       if(otherDot !== dot) {
-        if(distance(dot, otherDot) < 100) {
-          stroke(255);
+        if(distance(dot, otherDot) < 150) {
+          stroke(134, 33, 33);
           line(dot.x, dot.y, otherDot.x, otherDot.y);
         }
       }
     }
     dot.show();
-    dot.pressed = false;
   }
 }
 

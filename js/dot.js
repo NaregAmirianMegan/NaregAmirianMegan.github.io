@@ -1,19 +1,18 @@
 class Dot {
-
   constructor(xPos, yPos) {
     this.x = xPos;
     this.y = yPos;
-    this.size = 5;
+    this.size = random(2, 4);
     this.color = {
       r: 255,
       g: 255,
-      b: 255
+      b: 255,
+      a: 90
     }
     this.deltaX = random(-1, 1);
     this.deltaY = random(-1, 1);
     this.timeStep = 0;
   }
-
   checkEdges() {
     if (this.x > width) {
       this.x = 0;
@@ -26,15 +25,13 @@ class Dot {
       this.y = height;
     }
   }
-
   update() {
     this.x += this.deltaX;
     this.y += this.deltaY;
   }
-
   show() {
-    stroke(0);
-    fill(this.color.r, this.color.g, this.color.b);
+    stroke(this.color.r, this.color.g, this.color.b);
+    fill(this.color.r, this.color.g, this.color.b, this.color.a);
     this.checkEdges();
     this.update();
     ellipse(this.x, this.y, this.size, this.size);
