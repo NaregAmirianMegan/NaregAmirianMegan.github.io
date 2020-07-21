@@ -1,643 +1,538 @@
 <!DOCTYPE html>
-<!--[if lt IE 9 ]><html class="no-js oldie" lang="en"> <![endif]-->
-<!--[if IE 9 ]><html class="no-js oldie ie9" lang="en"> <![endif]-->
-<!--[if (gte IE 9)|!(IE)]><!-->
-<html class="no-js" lang="en">
-<!--<![endif]-->
-
-<head>
-
-    <!--- basic page needs
-    ================================================== -->
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
     <meta charset="utf-8">
-    <title>Nareg Megan</title>
-    <meta name="description" content="Personal Website">
-    <meta name="author" content="Nareg A. Megan">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-    <!-- mobile specific metas
-    ================================================== -->
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
 
-    <!-- CSS
-    ================================================== -->
-    <link rel="stylesheet" href="css/base.css">
-    <link rel="stylesheet" href="css/vendor.css">
-    <link rel="stylesheet" href="css/main.css">
+    <!--style-->
+    <link rel="stylesheet" type="text/css" href="css/style.css">
+    <script src="https://unpkg.com/isotope-layout@3/dist/isotope.pkgd.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="css/grid_layout.css">
+    <link rel="stylesheet" type="text/css" href="css/modal.css">
 
-    <!-- script
-    ================================================== -->
-    <script src="js/modernizr.js"></script>
-    <script src="js/pace.min.js"></script>
+    <title>Nareg Amirian Megan</title>
+  </head>
+  <body>
 
-    <script src="front-end/p5/p5.min.js"></script>
-    <script src="front-end/p5/addons/p5.dom.min.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-    <script src="js/sketch.js"></script>
-    <script src="js/dot.js"></script>
+    <!--TOP BANNER-->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <a class="navbar-brand" href="" style="color: white; border-right: 2px solid white; padding-right: 15px;"><b>Nareg</b></a>
+        <a class="navbar-brand" href="#footer">About</a>
+        <a class="navbar-brand" href="https://github.com/NaregAmirianMegan">
+            <img src="media/img/git_logo.png" width="30" height="30" alt="GitHub">
+        </a>
+        <a class="navbar-brand" href="https://www.linkedin.com/in/nareg-megan">
+            <img src="media/img/linkedin_logo.png" width="30" height="30" alt="LinkedIn">
+        </a>
+        <a href="mailto:nmegan@berkeley.edu" target="_blank" style="color: white;">nmegan@berkeley.edu</a>
+    </nav>
+    <!--END TOP BANNER-->
 
-    <!-- favicons
-    ================================================== -->
-    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
-
-</head>
-
-<body id="top">
-
-    <!-- header
-    ================================================== -->
-    <header class="s-header">
-
-        <nav class="header-nav-wrap">
-            <ul class="header-nav">
-                <li class="current"><a class="smoothscroll"  href="#home" title="home">Home</a></li>
-                <li><a class="smoothscroll"  href="#about" title="about">About</a></li>
-                <li><a class="smoothscroll"  href="#education" title="works">Education</a></li>
-                <li><a class="smoothscroll"  href="#experience" title="blog">Experience</a></li>
-                <li><a class="smoothscroll"  href="#projects" title="contact">Projects</a></li>
-                <li><a class="smoothscroll"  href="#contact" title="contact">Contact</a></li>
-            </ul>
-        </nav>
-
-        <a class="header-menu-toggle" href="#0"><span>Menu</span></a>
-
-    </header> <!-- end s-header -->
-
-
-   <!-- home
-   ================================================== -->
-   <section id="home" class="s-home page-hero target-section" data-parallax="scroll" data-image-src="images/background.jpg" data-natural-width=3000 data-natural-height=2000 data-position-y=center>
-
-        <div class="overlay"></div>
-        <div class="shadow-overlay"></div>
-
-        <div class="home-content">
-
-            <div class="row home-content__main">
-
-                <h3>Hey</h3>
-
-                <h1>
-                    I'm Nareg. <br>
-                </h1>
-
-                <div class="home-content__buttons">
-                    <a href="#about" class="smoothscroll btn btn--stroke">
-                        About Me
-                    </a>
-                    <a href="#education" class="smoothscroll btn btn--stroke">
-                        Education
-                    </a>
-                    <a href="#experience" class="smoothscroll btn btn--stroke">
-                        Experience
-                    </a>
-                    <a href="#projects" class="smoothscroll btn btn--stroke">
-                        Projects
-                    </a>
-                    <a href="#contact" class="smoothscroll btn btn--stroke">
-                        Contact Me
-                    </a>
-                </div>
-
-                <div class="home-content__scroll">
-                    <a href="#about" class="scroll-link smoothscroll">
-                        <span>Scroll Down</span>
-                    </a>
-                </div>
-
+    <div id="particles-js">
+        <div id="top-section-bgd">
+            <!--TOP SECTION-->
+            <div id="top-section" class="container-fluid">
+                    <!--Profile Image-->
+                    <img src="media/img/prof_pic.png" alt="Profile Picture">
+                    <h5 id="mini-bio">Computer Science at UC Berkeley</h5>
+                    <h7>CS, ML, Robotics, Operating/Embedded Systems, ASIC/FPGA/Microprocessors</h7>
+                    <br>
+                    <a class="btn btn-outline-dark" id="resume-txt" href="media/files/Nareg-Amirian-Megan-Resume2020.pdf" target="_blank">Resume</a>
             </div>
-
-        </div> <!-- end home-content -->
-
-        <ul class="home-social">
-          <li>
-              <a href="mailto:nmegan@berkeley.edu"><i class="im im-mail" aria-hidden="true"></i><span>Email</span></a>
-          </li>
-          <li>
-              <a href="https://github.com/NaregAmirianMegan"><i class="im im-github" aria-hidden="true"></i><span>Github</span></a>
-          </li>
-          <li>
-              <a href="https://www.linkedin.com/in/nareg-megan"><i class="im im-linkedin" aria-hidden="true"></i><span>LinkedIn</span></a>
-          </li>
-        </ul>
-        <!-- end home-social -->
-
-    </section> <!-- end s-home -->
-
-
-    <!-- about
-    ================================================== -->
-    <section id="about" class="s-about target-section">
-
-        <div class="row narrow section-intro has-bottom-sep">
-            <div class="col-full text-center">
-              <img class="prof_pic" src="images/prof_pic.png" alt="Profile Picture">
-                <h3>About</h3>
-                <h1>About Me</h1>
-                <p class="lead">I'm a computer science and applied math major at UC Berkeley interested in a variety of STEM related topics including software and hardware development. I'm also fascinated by the fundamental concepts underlying technology like mathematics, physics, and chemistry. I also like working out, playing basketball, and watching movies and tv!</p>
-            </div>
+            <!--END TOP SECTION-->
         </div>
-
-        <div class="row about-content">
-
-            <div class="col-six tab-full left">
-                <h3>Overview</h3>
-
-                <p>I grew up in Madison, Wisconsin where I went to Middleton High School. My first name, Nareg (pronounced like Nah-dehg), is Armenian, and my last name, Megan (pronounced with a long e), is Irish. Thus, my name is half Armenian and half Irish, like me!</p>
-
-                <p>My interest in STEM fields started in elementary school and has been increasing ever since then; exploring and creating new technologies has and always will be a passion and a pastime for me. I also love learning how things (STEM related or not) work in general (Youtube tutorials take up a lot of my time).</p>
-            </div>
-
-            <div class="col-six tab-full right">
-                <h3>Skills</h3>
-
-                <ul class="skill-bars">
-                    <li>
-                    <div class="progress percent90"><span>90%</span></div>
-                    <strong>Python</strong>
-                    </li>
-                    <li>
-                    <div class="progress percent85"><span>85%</span></div>
-                    <strong>Java</strong>
-                    </li>
-                    <li>
-                    <div class="progress percent75"><span>75%</span></div>
-                    <strong>AI/ML (Algorithms and Libraries)</strong>
-                    </li>
-                    <li>
-                    <div class="progress percent70"><span>70%</span></div>
-                    <strong>Data Managament and Analysis</strong>
-                    </li>
-                    <li>
-                    <div class="progress percent65"><span>65%</span></div>
-                    <strong>JavaScript/CSS/HTML</strong>
-                    </li>
-                </ul>
-            </div>
-
-        </div> <!-- end about-content -->
-
-    </section> <!-- end about -->
-
-    <section id="education" class="s-about target-section">
-      <div class="row about-content about-content--timeline">
-
-          <div class="col-full text-center">
-              <h1>Education and Organizations</h1>
-          </div>
-
-          <div class="col-six tab-full left">
-              <div class="timeline">
-
-                <div class="timeline__block">
-                    <div class="timeline__bullet"></div>
-                    <div class="timeline__header">
-                        <p class="timeline__timeframe">August 2018 - Present</p>
-                        <h3>University of California, Berkeley</h3>
-                        <h5>Undergraduate Computer Science and Applied Math</h5>
-                    </div>
-                    <div class="timeline__desc">
-                        <ul>
-                          <li>
-                            CS 61A (Structure and Interpretation of Computer Programs)
-                          </li>
-                          <li>
-                            CS 61B (Data Structures)
-                          </li>
-                          <li>
-                            CS 70 (Discrete Math and Probability Theory)
-                          </li>
-                          <li>
-                            Integrative Biology 35AC (Human Biological Variation)
-                          </li>
-                          <li>
-                            Math 53 (Multivariable Calculus)
-                          </li>
-                          <li>
-                            Chemistry 1A
-                          </li>
-                        </ul>
-                    </div>
-                </div> <!-- end timeline__block -->
-
-                <div class="timeline__block">
-                    <div class="timeline__bullet"></div>
-                    <div class="timeline__header">
-                        <p class="timeline__timeframe">September 2017 - May 2018</p>
-                        <h3>University of Wisconsin, Madison</h3>
-                        <h5>Undergraduate Classes</h5>
-                    </div>
-                    <div class="timeline__desc">
-                      <ul>
-                          <li>
-                            Linear Algebra and Diff. Eq.
-                          </li>
-                          <li>
-                            CS 300 (Programming II)
-                          </li>
-                          <li>
-                            CS 400 (Programming III)
-                          </li>
-                        </ul>
-                        <p>The CS classes were taught in Java and covered topics including data structures (Linked Lists, Stacks/Queues, Trees and balancing, Heaps, Graphs, and Hashing), lambda functions, functional interfaces, unit tests, and space/time complexities.
-                        </p>
-                    </div>
-                </div> <!-- end timeline__block -->
-
-                <div class="timeline__block">
-                    <div class="timeline__bullet"></div>
-                    <div class="timeline__header">
-                        <p class="timeline__timeframe">September 2014 - May 2018</p>
-                        <h3>Middleton High School</h3>
-                        <h5>High School Degree</h5>
-                    </div>
-                    <div class="timeline__desc">
-                        <p>Coursework: </br> AP Computer Science, AP Chemistry, AP Physics, AP Psychology, AP Calculus (AB/BC), AP Language and Composition, AP Literature.</p>
-                    </div>
-                </div> <!-- end timeline__block -->
-
-              </div> <!-- end timeline -->
-          </div> <!-- end left -->
-
-          <div class="col-six tab-full right">
-              <div class="timeline">
-
-                  <div class="timeline__block">
-                      <div class="timeline__bullet"></div>
-                      <div class="timeline__header">
-                          <p class="timeline__timeframe">February 2019 - Present</p>
-                          <h3>Cal Launchpad</h3>
-                          <h5>Developer</h5>
-                      </div>
-                      <div class="timeline__desc">
-                          <p><a href="https://callaunchpad.org">Cal Launchpad</a> is an organization at UC Berkeley that develops software based on cutting edge applied machine learning. I'm a developer on the <a href="https://moorjanilab.org/">Moorjani Lab</a> project team. We are working with Moorjani Lab to enhance ancestral genetics tracing with novel ML algorithms. These algorithms could eventually allow us to more accurately trace diseases and understand heritage and adaptation.</p>
-                      </div>
-                  </div> <!-- end timeline__block -->
-
-                  <div class="timeline__block">
-                      <div class="timeline__bullet"></div>
-                      <div class="timeline__header">
-                          <p class="timeline__timeframe">February 2019 - Present</p>
-                          <h3>Open Source at Berkeley</h3>
-                          <h5>Developer</h5>
-                      </div>
-                      <div class="timeline__desc">
-                          <p><a href="https://www.ocf.berkeley.edu/~opensource/">Open Source at Berkeley</a> is a student body at Cal that develops open source software to be distributed to the broader STEM community. My team is working on making quantitative financial data easier to work with so that quant trading becomes more accessible to the public.</p>
-                      </div>
-                  </div> <!-- end timeline__block -->
-
-                  <div class="timeline__block">
-                      <div class="timeline__bullet"></div>
-                      <div class="timeline__header">
-                          <p class="timeline__timeframe">December 2015 - May 2018</p>
-                          <h3>Investment Club</h3>
-                          <h5>Co-President / Co-Founder</h5>
-                      </div>
-                      <div class="timeline__desc">
-                          <p>My responsibilities included gathering initial members, entering the club into different competitions, speaking to potential guest speakers from financial firms in the area, and presenting on topics from options trading to cryptocurrencies. The club participated in multiple financial competitions such as How The Market Works and the Wisconsin Finance/Investment Bowl.</p>
-                      </div>
-                  </div> <!-- end timeline__block -->
-
-              </div> <!-- end timeline -->
-          </div> <!-- end right -->
-
-      </div> <!-- end about-content timeline -->
-    </section>
-
-    <section id="experience" class="s-about target-section">
-      <div class="row about-content about-content--timeline">
-
-          <div class="col-full text-center", id="experience">
-              <h1>Experience</h1>
-          </div>
-
-        <div class="col-6 tab-full left">
-            <div class="timeline">
-
-                 <div class="timeline__block">
-                    <div class="timeline__bullet"></div>
-                    <div class="timeline__header">
-                        <p class="timeline__timeframe">May 2019 - Present</p>
-                        <h3>Direct Real Estate Brokerage Platform</h3>
-                        <h5>Software Engineering Intern</h5>
-                    </div>
-                    <div class="timeline__desc">
-                      <p>Built data intake pipeline using image/text processing and optical character recognition (OpenCV, regex, etc..). Utilized Google Cloud APIs such as Google Vision and Gmail. Designed API used to integrate backend functionality with ReactJS frontend. Helped create tests and integrate platform for product release.
-                      </p>
-                    </div>
-                </div> <!-- end timeline__block -->
-
-                <div class="timeline__block">
-                    <div class="timeline__bullet"></div>
-                    <div class="timeline__header">
-                        <p class="timeline__timeframe">February 2019 - May 2019</p>
-                        <h3>UC Berkeley EECS</h3>
-                        <h5>Academic Intern / Lab Assistant</h5>
-                    </div>
-                    <div class="timeline__desc">
-                        <p>Answer students questions and make sure they understand key concepts during lab and office hours for Computer Science 61A at UC Berkeley. For concept checks, I lead students through problems and help them learn how to think about different types challenges when solving algorithmic puzzles. If students have questions relating to labs, homeworks, projects, or tests I help guide them to the answer of their question.</p>
-                    </div>
-                </div> <!-- end timeline__block -->
-
-                <div class="timeline__block">
-                    <div class="timeline__bullet"></div>
-                    <div class="timeline__header">
-                        <p class="timeline__timeframe">June 2017 - August 2017</p>
-                        <h3>WIPAC</h3>
-                        <h5>Data Analyst</h5>
-                    </div>
-                    <div class="timeline__desc">
-                        <p>The Wisconsin IceCube Particle Astrophysics Center (WIPAC) is an astrophysics lab based out of UW-Madison. They collect and analyze data from the IceCube neutrino detector in the South Pole. My job was to analyze neutrino data (using primarily python) and develop datasets of neutrino “events” that the computer algorithms commonly misclassified (i.e. type, direction, energy, etc. of neutrino). By partitioning misclassified data it allows for improvement of computer classification algorithms as well as new potential discoveries.</p>
-                    </div>
-                </div> <!-- end timeline__block -->
-
-                <div class="timeline__block">
-                    <div class="timeline__bullet"></div>
-                    <div class="timeline__header">
-                        <p class="timeline__timeframe">March 2016 - Present</p>
-                        <h3>Martingilio Martial Arts</h3>
-                        <h5>Instructor</h5>
-                    </div>
-                    <div class="timeline__desc">
-                        <p>Martingilio martial arts is a mixed martial arts studio in Madison, WI. I train at the gym while also instructing students in martial arts including Kempo, Kyusho Jitsu, Jiu Jitsu, Judo, Boxing, and Arnis. I come back to train and teach during the summers.</p>
-                    </div>
-                </div> <!-- end timeline__block -->
-
-            </div> <!-- end timeline -->
-        </div> <!-- end left -->
-      </div>
-
-      <div class="row about-content about-content--buttons">
-
-          <div class="col-twelve tab-full left">
-              <a href="Nareg-A-Megan-Resume.pdf" class="btn btn--primary full-width" download>Download My Resume</a>
-          </div>
-
-      </div> <!-- end about-content buttons -->
-
-    </section>
-
-
-    <!-- works
-    ================================================== -->
-    <section id="projects" class="s-works target-section">
-
-        <div class="row narrow section-intro has-bottom-sep">
-            <div class="col-full">
-                <h1 style="color: #862121 ! important;">Projects</h1>
-            </div>
-        </div>
-
-          <div class="row">
-
-            <div class="col-sm text-center">
-              <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
-                <div class="card-body d-flex flex-column">
-                  <h4 class="card-title">Java Neural Network Library</h4>
-                  <p class="card-text">A neural network library built from scratch in Java. It is customizable and implements activation functions, momentum and gradient descent. The library also includes an extensive matrix calculation library from which the ANNs are built.</p>
-                  <a href="https://github.com/NaregAmirianMegan/Artificial-Neural-Network" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-sm text-center">
-              <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
-                <div class="card-body">
-                  <h4 class="card-title">Reddit Chatbot</h4>
-                  <p class="card-text">A Neural Machine Translation model built in TensorFlow that essentially translates English to English (like an English conversation). Comment data from Reddit managed in SQLite was used to train the model. Reddit data was also used recently by some of the more advanced NLP models from OpenAI and DeepMind.</p>
-                  <a href="https://github.com/NaregAmirianMegan/reddit-chatbot" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
-                </div>
-              </div>
-            </div>
-
-            <div class="col-sm text-center">
-              <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
-                <div class="card-body">
-                  <h4 class="card-title">Atari Breakout ML</h4>
-                  <p class="card-text">I built a simple atari breakout engine and then preprocessed the frames and sent them through a Deep-Q-Learning model to get the computer to play the game. I learned a lot about data preprocessing, image compression, image processing, and light-weight convolutional neural networks for reinforcement learning.</p>
-                  <a href="https://github.com/NaregAmirianMegan/atari-breakout-ML" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
-                </div>
-              </div>
-            </div>
-
-        </div>
-
-        <div class="row">
-
-          <div class="col-sm text-center">
-            <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
-              <div class="card-body">
-                <h4 class="card-title">Star Defense iOS App</h4>
-                <p class="card-text">To gain experience with iOS development I built a variation on space invaders in iOS that uses motion to control the speed and direction of the spacecraft. Through the project I was able to learn about iOS graphics, Swift, and the inner workings of mobile applications.</p>
-                <a href="https://github.com/NaregAmirianMegan/Star-Defense" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-sm text-center">
-            <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
-              <div class="card-body">
-                <h4 class="card-title">Data Scraper</h4>
-                <p class="card-text">A lot of experimental machine learning requires scraping data from the web, whether it be images, stock data, or text. This repository uses Selenium and the requests library to help with this process. The library available on GitHub currently isn't very large, but I'm working on expanding it out to different areas needed in ML like text and numerical data (like for finance).</p>
-                <a href="https://github.com/NaregAmirianMegan/Data-Collector" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-sm text-center">
-            <div class="card rounded" style="width: 35rem ! important; padding: 0.45rem ! important;">
-              <div class="card-body">
-                <h4 class="card-title">RL Trading Bot</h4>
-                <p class="card-text">I’m currently working on applying reinforcement learning to financial trading in small cap stocks, forex, and cryptocurrency. Trading can be thought of as a game (with some pretty severe consequences). But research is showing that RL algorithms are surpassing humans in terms of strategic game play (i.e. atari games, AlphaGo, and AlphaZero). A bot can learn what action is best to take based on hundreds or thousands of input features. (I don't currently have a public repository for this).</p>
-                <!-- <a href="#" class="btn btn-primary" style="border-radius: 0.25rem ! important;">GitHub</a> -->
-              </div>
-            </div>
-          </div>
-
-      </div>
-
-
-    </section> <!-- Portfolio Section End-->
-
-    <!-- s-stats
-    ================================================== -->
-    <section id="contact" class="s-contact target-section">
-
-        <div class="overlay"></div>
-
-        <div class="row narrow section-intro">
-            <div class="col-full">
-                <h3>Contact</h3>
-                <h1>Email me</h1>
-
-                <p class="lead">about jobs, research, fun facts, whatever! I'd love to get in touch!</p>
-            </div>
-        </div>
-
-        <div class="row contact__main">
-            <div class="col-eight tab-full contact__form">
-                <form name="contactForm" id="contactForm" method="post" action="">
-                    <fieldset>
-
-                    <div class="form-field">
-                        <input name="contactName" type="text" id="contactName" placeholder="Name" value="" minlength="2" required="" aria-required="true" class="full-width">
-                    </div>
-                    <div class="form-field">
-                        <input name="contactEmail" type="email" id="contactEmail" placeholder="Email" value="" required="" aria-required="true" class="full-width">
-                    </div>
-                    <div class="form-field">
-                        <input name="contactSubject" type="text" id="contactSubject" placeholder="Subject" value="" class="full-width">
-                    </div>
-                    <div class="form-field">
-                        <textarea name="contactMessage" id="contactMessage" placeholder="message" rows="10" cols="50" required="" aria-required="true" class="full-width"></textarea>
-                    </div>
-                    <div class="form-field">
-                        <button class="full-width btn--primary">Submit</button>
-                        <div class="submit-loader">
-                            <div class="text-loader">Sending...</div>
-                            <div class="s-loader">
-                                <div class="bounce1"></div>
-                                <div class="bounce2"></div>
-                                <div class="bounce3"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    </fieldset>
-                </form>
-
-                <!-- contact-warning -->
-                <div class="message-warning">
-                    Something went wrong. Please try again.
-                </div>
-
-                <!-- contact-success -->
-                <div class="message-success">
-                    Your message was sent, thank you!<br>
-                </div>
-
-            </div>
-            <div class="col-four tab-full contact__infos">
-                <h4 class="h06">Phone</h4>
-                <p>Phone: (608) 843-7045
-                </p>
-
-                <h4 class="h06">Email</h4>
-                <p>nmegan@berkeley.edu<br>
-                  naregmegan@gmail.com
-                </p>
-
-                <h4 class="h06">Address One</h4>
-                <p>
-                9116 Aspen Grove Lane<br>
-                Madison, WI<br>
-                53717 US
-                </p>
-                <h4 class="h06">Address Two</h4>
-                <p>
-                2401 Durant Avenue<br>
-                Berkeley, CA<br>
-                94704 US
-                </p>
-            </div>
-
-        </div>
-
-    </section> <!-- end s-contact -->
-
-
-    <!-- footer
-    ================================================== -->
-    <footer>
-        <div class="row">
-            <div class="col-full">
-
-                <ul class="footer-social">
-                    <li><a href="#0">
-                        <i class="im im-mail" aria-hidden="true"></i>
-                        <span>Mail</span>
-                    </a></li>
-                    <li><a href="#0">
-                        <i class="im im-github" aria-hidden="true"></i>
-                        <span>Github</span>
-                    </a></li>
-                    <li><a href="#0">
-                        <i class="im im-linkedin" aria-hidden="true"></i>
-                        <span>LinkedIn</span>
-                    </a></li>
-                </ul>
-
-            </div>
-        </div>
-
-        <div class="row footer-bottom">
-
-            <div class="col-twelve">
-                <div class="copyright">
-                    <span>© Copyright Nareg A. Megan 2019</span>
-                    <span>Design by Nareg Megan and <a href="https://www.styleshout.com/">styleshout</a></span>
-                </div>
-
-                <div class="go-top">
-                <a class="smoothscroll" title="Back to Top" href="#top"><i class="im im-arrow-up" aria-hidden="true"></i></a>
-                </div>
-            </div>
-
-        </div> <!-- end footer-bottom -->
-
-    </footer> <!-- end footer -->
-
-
-    <!-- photoswipe background
-    ================================================== -->
-    <div aria-hidden="true" class="pswp" role="dialog" tabindex="-1">
-
-        <div class="pswp__bg"></div>
-        <div class="pswp__scroll-wrap">
-
-            <div class="pswp__container">
-                <div class="pswp__item"></div>
-                <div class="pswp__item"></div>
-                <div class="pswp__item"></div>
-            </div>
-
-            <div class="pswp__ui pswp__ui--hidden">
-                <div class="pswp__top-bar">
-                    <div class="pswp__counter"></div><button class="pswp__button pswp__button--close" title="Close (Esc)"></button> <button class="pswp__button pswp__button--share" title=
-                    "Share"></button> <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button> <button class="pswp__button pswp__button--zoom" title=
-                    "Zoom in/out"></button>
-                    <div class="pswp__preloader">
-                        <div class="pswp__preloader__icn">
-                            <div class="pswp__preloader__cut">
-                                <div class="pswp__preloader__donut"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
-                    <div class="pswp__share-tooltip"></div>
-                </div><button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)"></button> <button class="pswp__button pswp__button--arrow--right" title=
-                "Next (arrow right)"></button>
-                <div class="pswp__caption">
-                    <div class="pswp__caption__center"></div>
-                </div>
-            </div>
-
-        </div>
-
-    </div><!-- end photoSwipe background -->
-
-    <div id="preloader">
-        <div id="loader"></div>
     </div>
 
+    <!--EXPERIENCE SECTION-->
+    <div id="experience-section" class="container-fluid">
+        <h3 id="experience-header" style="text-align: center; color: #2c576b; font-size: 32px; font-family: Verdana, Geneva, Tahoma, sans-serif;"><b>Portfolio</b></h3>
+        
 
-    <!-- Java Script
-    ================================================== -->
-    <script src="js/jquery-3.2.1.min.js"></script>
-    <script src="js/plugins.js"></script>
-    <script src="js/main.js"></script>
+        <div class="button-group filters-button-group">
+            <button class="button is-checked" data-filter="*">Show All</button>
+            <button class="button" data-filter=".experience">Experience</button>
+            <button class="button" data-filter=".research">Research</button>
+            <button class="button" data-filter=".teaching">Teaching</button>
+            <button class="button" data-filter=".software">Software</button>
+            <button class="button" data-filter=".hardware">Hardware</button>
+            <button class="button" data-filter=".ml">Machine Learning</button>
+            <button class="button" data-filter=".robotics">Robotics</button>
+        </div>
+        
+        <div class="grid">
 
-</body>
+            <div class="element-item experience software">
+                <div class="image">
+                    <img id="myImage" src="media/img/pf9_logo.png" alt="img" data-toggle="modal" data-target="#myModal1">
+                    <span style="left: 70px; top: 45px;"><b>Internship</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal1" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Software Engineer Intern</u></h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>I'm currently interning at <a href="https://platform9.com/" target="_blank">Platform9</a>, a company that creates, manages, and scales cloud infrastructure. I'm Working on the
+                                    Platform9 Managed Kubernetes team integrating Helm 3 into the PMK service. 
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item teaching software hardware">
+                <div class="image">
+                    <img id="myImage" src="media/img/eecs_logo.png" alt="img" data-toggle="modal" data-target="#myModal2">
+                    <span style="left: 60px; top: 40px;"><b>Course Staff</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal2" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Teaching EECS</u> <br>
+                                    <a href="https://cs61a.org/" style="padding-top: 10px; padding-right: 10px; text-decoration: none;" target="_blank">
+                                        <img src="media/img/61a_img.png" width="100" height="100" alt="CS61A" style="border-radius: 25px;">
+                                    </a>
+                                    <a href="https://cs61c.org/su20/" style="padding-top: 10px; padding-left: 10px;" target="_blank"> 
+                                            <img src="media/img/61c_img.png" width="100" height="100" alt="CS61A" style="border-radius: 25px;">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p><b>CS 61A Lab Assistant</b>: Answered questions during lab and ofﬁce hours pertaining to Python, Scheme, SQL, 
+                                    or any other course topics. Resolved technical issues with both the students and the course including 
+                                    homework and project submission errors.<br><br> <b>CS 61C Tutor</b>: Teach groups of students about C/low-level code, assembly code, basic microprocessor design, computer
+                                    memory, and data/thread-level parallelism. Help students in labs, discussions, and office hours.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item hardware research">
+                <div class="image">
+                    <img id="myImage" src="media/img/chipyard_logo.png" alt="img" data-toggle="modal" data-target="#myModal3">
+                    <span style="left: 15px; top: 15px;"><b>Computer Architecture Research</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal3" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Gemmini Project for ML hardware accelerators</u><br>
+                                    <a class="navbar-brand" href="https://github.com/ucb-bar/gemmini">
+                                        <img src="media/img/git_logo2.png" width="30" height="30" alt="GitHub">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>Coming Soon.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item experience software ml">
+                <div class="image" style="border: 3px solid rgba(13, 109, 252, 0.425); border-radius: 20px;">
+                    <img id="myImage" src="media/img/lp_logo.png" alt="img" data-toggle="modal" data-target="#myModal4">
+                    <span style="left: 15px; top: 25px;"><b>Machine Learning Developer</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal4" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">ML Developer @ Cal Launchpad</u><br>
+                                    <a class="navbar-brand" href="https://github.com/callaunchpad">
+                                        <img src="media/img/git_logo2.png" width="30" height="30" alt="GitHub">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>I've worked on various projects in <a href="https://callaunchpad.org/#/" target="_blank">Launchpad</a> involving classical ML, deep learning, and RL. As a part of 
+                                    education committee I helped lead workshops on different ML topics. I'm currently working on the external
+                                    committee to expand the professional and educational reach of our club.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item robotics research">
+                <div class="image">
+                    <img id="myImage" src="media/img/bml_logo.png" alt="img" data-toggle="modal" data-target="#myModal5">
+                    <span style="left: 10px; top: 30px;"><b>Multi-Robot Cooperation</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal5" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Research Assistant</u> <br>
+                                    <img src="media/img/vrep.png" style="height: 175px; width: 250px; padding-top: 10px;">
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>I worked in a group of undergraduate researchers within the <a href="https://people.eecs.berkeley.edu/~ronf/Biomimetics.html" target="_blank">Biomimetic Millisystems Lab</a> on multi-robot cooperation. We used tools such as 
+                                    VREP, CAD, and physical robots to test and improve path planning, cooperation, and task completion 
+                                    abilities of a group of connected robots.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item experience software research">
+                <div class="image" style="border: 3px solid rgba(13, 109, 252, 0.425); border-radius: 20px;">
+                    <img id="myImage" src="media/img/wipac_logo.png" alt="img" data-toggle="modal" data-target="#myModal6">
+                    <span style="left: 10px; top: 45px;"><b>Data Analytics Intern</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal6" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Data Analytics in Astrophysics</u> <br>
+                                        <img src="media/img/IceCube-event.png" style="height: 175px; width: 250px; padding-top: 10px;">
+                                </h4>
+                                
+                            </div>
+                            <div class="modal-body">
+                                <p>The <a href="https://wipac.wisc.edu/" target="_blank">Wisconsin IceCube Particle Astrophysics Center</a> studies neutrino data from the IceCube research facility in 
+                                    the South Pole. I Used Python and SQL to analyze neutrino data and develop datasets of commonly misclassiﬁed neutrino 
+                                    events from the IceCube neutrino detector. I Leveraged a platform called Zooniverse for human analysis 
+                                    of data which improved the quality of the training data. Improved neutrino classiﬁcation algorithms 
+                                    SVMs, neural nets using curated data.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item experience software">
+                <div class="image">
+                    <img id="myImage" src="media/img/house.png" alt="img" data-toggle="modal" data-target="#myModal7">
+                    <span style="left: 25px; top: 45px;"><b>Startup Internship</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal7" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Software Engineer Intern, Brokerage Startup</u></h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>While working for a startup aiming to streamline the real estate brokerage process I helped build the data 
+                                    intake pipeline using image/text processing and optical character recognition 
+                                    OpenCV, regex, etc. I utilized Google Cloud APIs such as Google Vision and Gmail. Assisted in the 
+                                    design of the API used to integrate backend functionality with ReactJS frontend. Helped create tests 
+                                    and integrate the platform for product release.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item hardware software">
+                <div class="image" style="border: 3px solid rgba(13, 109, 252, 0.425); border-radius: 20px;">
+                    <img id="myImage" src="media/img/hft_pic.png" alt="img" data-toggle="modal" data-target="#myModal8">
+                    <span style="left: 10px; top: 35px;"><b>Verilog Generator for HFT</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal8" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Generating hardware in Verilog for basic quant trading strategies</u><br>
+                                    <img src="media/img/hft_code_img.png" style="height: 200px; width: 180px; padding-top: 10px;"> 
+                                    <img src="media/img/hft_pic.png" style="height: 175px; width: 250px; padding-top: 10px;"> 
+                                    <br>
+                                    <a class="navbar-brand" href="https://github.com/NaregAmirianMegan/hft-verilog-generator" target="_blank">
+                                        <img src="media/img/git_logo2.png" width="30" height="30" alt="GitHub">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>High Frequency Trading and quantitative trading relies largely on the speed of decision making and execution. FPGAs
+                                    can be used to create task specific hardware and replicate that hardware thousands of times over, allowing for highly
+                                    efficient and parallelized computation. In this project I wrote a Verilog generator. When given a json file which describes
+                                    mathematical rules for executing trades the generator creates both the hardware description
+                                    and a test bench which can be used to virtually run the hardware using Icarus. 
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item ml software">
+                <div class="image" style="border: 3px solid rgba(13, 109, 252, 0.425); border-radius: 20px;">
+                    <img id="myImage" src="media/img/ann_img.jpg" alt="img" data-toggle="modal" data-target="#myModal9">
+                    <span style="left: 30px; top: 45px;"><b>Java ANN Library</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal9" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Artificial Neural Network framework in Java</u><br>
+                                    <a class="navbar-brand" href="https://github.com/NaregAmirianMegan/Artificial-Neural-Network" target="_blank">
+                                        <img src="media/img/git_logo2.png" width="30" height="30" alt="GitHub">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>In order to learn the inner-workings of neural networks I wrote my own basic ANN library in Java including
+                                    my own matrix processing library. In the end I was able to get the network to accurately model basic functions
+                                    such as xor.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item ml software">
+                <div class="image" style="border: 3px solid rgba(13, 109, 252, 0.425); border-radius: 20px;">
+                    <img id="myImage" src="media/img/vqn_img.png" alt="img" data-toggle="modal" data-target="#myModal10">
+                    <span style="left: 25px; top: 45px;"><b>Visual Q/A System</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal10" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Launchpad Project: Visual Q&A</u><br>
+                                    <img src="media/img/musecage_img.png" style="height: 225px; width: 260px; padding-top: 10px;"> 
+                                    <br>
+                                    <a class="navbar-brand" href="https://github.com/callaunchpad/Musecage" target="_blank">
+                                        <img src="media/img/git_logo2.png" width="30" height="30" alt="GitHub">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>The goal of this project was to recreate and improve upon state of the art VQA model architectures. The 
+                                    goal of VQA models is to answer a question about an image (see above). We tried many different approaches 
+                                    ranging from K-nearest neighbors to our own experimental architecture. Our final model used a recurrent form of 
+                                    attention attempting to emulate how a human would comprehend a sentence as they read it. For more specifics see the README
+                                    on our github.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item ml software">
+                <div class="image">
+                    <img id="myImage" src="media/img/rle_img.png" alt="img" data-toggle="modal" data-target="#myModal11">
+                    <span style="left: 10px; top: 30px;"><b>Emergent Behavior in RL</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal11" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Launchpad Project: Emergent Behavior in Reinforcement Learning</u><br>
+                                    <img src="media/img/Pong_MADQNSB_0.gif" style="height: 200px; width: 330px; padding-top: 10px;"> 
+                                    <br>
+                                    <a class="navbar-brand" href="https://github.com/callaunchpad/emergence" target="_blank">
+                                        <img src="media/img/git_logo2.png" width="30" height="30" alt="GitHub">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>Emergent behavior in reinforcment learning is the behavior of agents in an environment that have formed
+                                    due to the relationship it has with other entities in its environment. In our case we studied emergent behavior 
+                                    in symmetric game environments like pong and snake. You can see an example of a form of emergent behavior in the gif
+                                    above, as one agent learns to rapidly slide the paddle to hit the ball at a speed the other player can't respond to fast 
+                                    enough. 
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item ml software">
+                <div class="image" style="border: 3px solid rgba(13, 109, 252, 0.425); border-radius: 20px;">
+                    <img id="myImage" src="media/img/genes.png" alt="img" data-toggle="modal" data-target="#myModal12">
+                    <span style="left: 5px; top: 30px;"><b>Ancestral Tracing (Moorjani Lab)</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal12" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Launchpad Project: Ancestral Tracing in collaboration with Moorjani Lab</u><br>
+                                    <a class="navbar-brand" href="https://github.com/callaunchpad/LocalAncestry" target="_blank">
+                                        <img src="media/img/git_logo2.png" width="30" height="30" alt="GitHub">
+                                    </a>
+                                </h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>Inferring ancestry from genome data of reference populations from two (or more) reference populations 
+                                    admixed together. Used a hidden markov model through the implementation of the viterbi algorithm and SVMs.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
+            <div class="element-item software">
+                <div class="image" style="border: 3px solid rgba(13, 109, 252, 0.425); border-radius: 28px;">
+                    <img id="myImage" src="media/img/webdev_img.png" alt="img" data-toggle="modal" data-target="#myModal13">
+                    <span style="left: 75px; top: 46px;"><b>Web Dev</b></span>
+                </div>
+                    <!-- Modal -->
+                <div class="modal fade" id="myModal13" role="dialog">
+                    <div class="modal-dialog">
+                        <!-- Modal content-->
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h4 class="modal-title"><u style="font-family: Verdana, Geneva, Tahoma, sans-serif;">Web Dev</u></h4>
+                            </div>
+                            <div class="modal-body">
+                                <p>I've had experience developing the frontend and backend of different sites. Most of my frontend work has been with
+                                    vanilla HTML/CSS/JS, and my backend experience is primarily with Python and PHP. One main example of my frontend 
+                                    ability is this website, which I designed and built from scratch (uses bootstrap, particles.js, and isotope). One
+                                    backend project I've worked on recently is a COVID-19 contact tracer using the LAMP stack.
+                                </p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+            </div>
 
+        </div>
+
+    </div>
+    <!--END EXPERIENCE SECTION-->
+
+    <!--COURSEWORK AND SKILLS SECTION-->
+    <div class="float-container">
+        <!--COURSEWORK SECTION-->
+        <div class="float-child">
+            <div id="coursework-section" class="container-fluid">
+                <h3 id="coursework-header">Coursework</h3>
+                <ul>
+                    <li>CS 61A: Structure and Interpretation of Computer Programs</li>
+                    <li>CS 61B: Data Structures</li>
+                    <li>CS 61C: Great Ideas in Computer Architecture (Machine Structures)</li>
+                    <li>CS 70: Discete Math and Probability</li>
+                    <li>CS 152: Computer Architecture and Engineering</li>
+                    <li>CS 162: Operating Systems and System Programming</li>
+                    <li>CS 170: Efficient Algorithms and Intractable Problems</li>
+                    <li>EE 16B: Designing Information Devices and Systems II</li>
+                    <li>Chem 1A: General Chemistry</li>
+                    <li>Physics 7B: Physics for Scientists and Engineers</li>
+                    <li>Math 53: Multivariable Calculus</li>
+                    <li>Math 54: Linear Algebra & Differential Equations</li>
+                    <li>Math 110: Linear Algebra</li>
+                </ul>
+            </div>
+        </div>
+        <!--END COURSEWORK SECTION-->
+
+        <!--SKILLS SECTION-->
+        <div class="float-child">
+            <div id="skills-section" class="container-fluid">
+                <h3 id="skills-header">Skills</h3>
+                <ul>
+                    <li><b>Programming Languages</b>: Python, C, Java, C++, Assembly (RISCV, x86), Web (JS, HTML, CSS, PHP), Go</li>
+                    <li><b>Technical Concepts</b>: Machine Learning, Microprocessors/Microcontrollers, Digital Systems, Operating Systems, Networking</li>
+                    <li><b>Engineering</b>: Verilog/RTL, Git, Docker/Kubernetes/Helm, CAD, ROS</li>
+                </ul>
+            </div>
+            <!--ABOUT SECTION-->
+            <div id="about-section" class="container-fluid">
+                <h3 id="about-header">About Me</h3>
+                <p>I'm a computer science major at UC Berkeley interested in a variety of STEM related topics including 
+                    software and hardware development. I'm also fascinated by the fundamental concepts underlying technology like 
+                    mathematics, physics, and chemistry. When I can, I like working out, playing basketball, and watching movies/tv!
+                    If your curious my name is pronounced phonetically as Nah-deg :)
+                </p>
+            </div>
+            <!--END ABOUT SECTION-->
+        </div>
+        <!--END SKILLS SECTION-->
+        
+    </div>
+    <footer id="footer"></footer>
+
+    <!-- JavaScript -->
+    <script src="js/particles.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/isot.js"></script>
+    <!--isotope-->
+    <script src="https://unpkg.com/isotope-layout@3/dist/isotope.pkgd.min.js"></script>
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+  </body>
 </html>

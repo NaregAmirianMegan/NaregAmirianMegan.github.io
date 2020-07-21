@@ -1,0 +1,48 @@
+#top-section-bgd {
+    position: absolute;
+    z-index: 1;
+    padding-top: 120px;
+    padding-bottom: 120px;
+    width: 100%;
+    text-align: center;
+}
+
+#top-section {
+    color: #2c576b;
+}
+
+#particles-js {
+    width: 100%;
+    height: 66vh;
+    background-image: linear-gradient(#2c576b, white);
+    /* background-color: #2c576b; */
+}
+
+#mini-bio {
+    margin-top: 20px;
+}
+
+#resume-txt {
+    margin-top: 20px;
+}
+
+#experience-header {
+    margin-top: 20px;
+}
+
+#experience-section {
+    height: 800px;
+}
+
+.float-child {
+    color: rgb(245, 243, 243);
+    background-color: #2c576b;
+    width: 50%;
+    height: 400px;
+    float: left;
+    padding: 20px;
+}
+
+html, body {
+    overscroll-behavior: none;
+}

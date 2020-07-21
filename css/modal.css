@@ -1,0 +1,37 @@
+#myImage {
+    height: 126px;
+    width: 260px;
+    opacity: 1;
+    border-radius: 25px; 
+    transition: .5s ease;   
+  }
+
+.image {
+    display: inline-block;
+    padding: 0;
+    position: relative;
+}
+
+.image span {
+    position: absolute;
+    font-size: 20px;
+    color: rgba(0, 0, 0, 0);
+}
+  
+#myImage:hover {
+    transition: .5s ease;
+    cursor: pointer;
+    opacity: 0.1;
+    transform: scale(1.1);
+}
+
+.image:hover span {
+    z-index: -1;
+    opacity: 1;
+    color: black;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+}
+
+.modal-header {
+    margin: auto;
+}
