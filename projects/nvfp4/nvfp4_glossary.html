@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glossary — Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="blogbar">
+            <a href="/projects/nvfp4/nvfp4_blog.html">← NVFP4 Kernels</a>
+            <a href="https://github.com/NaregAmirianMegan/NVFP4_Kernels" target="_blank" rel="noopener noreferrer">View source on GitHub ↗</a>
+        </div>
+        <article class="post">
+            <h1>Glossary</h1>
+            <p class="post-meta">NVFP4 Kernel Series · Section 5 of 7</p>
+<p>This glossary collects the architectural and programming concepts referenced throughout the kernel walkthroughs. The earlier sections introduce each concept in the context in which it first becomes useful; the entries below are intended as standalone references that you can read out of order. Where a concept maps directly to a PTX instruction or hardware feature I include the relevant syntax block.</p>
+<h3 class="topic" id="coalesced-memory-access-and-memory-broadcasting">Coalesced Memory Access and Memory Broadcasting</h3>
+<p>Coalesced memory access is the property that when a warp issues a memory operation, the threads within that warp address a contiguous, aligned range of bytes, so the hardware can service all 32 threads with the minimum number of memory transactions (ideally one cache line). On Blackwell a 128B transaction is the natural unit, so a warp loading 32 consecutive 4-byte values from an aligned address gets one transaction; the same load with a stride of 1 between threads becomes 32 transactions and runs ~32x slower. Coalescence is the single biggest knob on memory-bound kernels — the GEMV kernels in this blog gain ~20-30% just by reordering rows so that adjacent warps own adjacent slices of A.</p>
+<p>Memory broadcasting is the dual property: when all threads in a warp read the *same* address, the hardware services the request as a single load and fans the value out to every thread. Broadcasts are also one-transaction operations, but for a different reason — the address is identical across the warp rather than contiguous. SFB scale-factor loads in GEMV/GEMM benefit from broadcasting because the same scalar applies to every result column for a given K block; that pattern means the compiler can fold the load into a single broadcast even when it appears inside a per-thread loop.</p>
+<h3 class="topic" id="register-spilling">Register Spilling</h3>
+<p>Each thread on an SM gets a fixed-size slice of the SM-wide register file (generally 255 32-bit registers on Blackwell). If the compiler&#x27;s live-range analysis decides the kernel needs more registers than that, the excess values &quot;spill&quot; to a per-thread region of local memory, which physically lives in L1/L2/HBM. Spilled values look like normal local variables in C++ but every read or write goes through the memory system; a few spilled variables in an inner loop can easily double a kernel&#x27;s runtime.</p>
+<p>Two signals tell you spilling is happening: ptxas warnings at compile time (<code>-Xptxas -v</code> will print <code>&lt;N&gt; bytes stack frame, &lt;M&gt; bytes spill stores</code>) and Nsight Compute&#x27;s &quot;Local Memory Accesses&quot; counter being non-zero. The common remedies are reducing the unroll factor of inner loops, moving large intermediate arrays into SMEM, or shrinking the number of simultaneously-live values (e.g., by accumulating results in TMEM rather than registers). The GEMV V6_3 experiment explicitly trades a small SMEM round-trip for a register-count reduction in an attempt to lift occupancy.</p>
+<h3 class="topic" id="thread-warp-cta-thread-block-cluster-grid">Thread, Warp, CTA/Thread-block, Cluster, Grid</h3>
+<p>The CUDA execution hierarchy is five levels deep on Blackwell:</p>
+<pre class="diagram">  Grid     -- the whole kernel launch
+   Cluster  -- a group of CTAs (1-16) that share a fast interconnect (DSMEM)
+    CTA     -- a thread block; runs entirely on one SM; owns SMEM
+     Warp   -- 32 threads that issue instructions in lockstep
+      Thread -- the smallest schedulable unit</pre>
+<p>A thread is the basic unit of execution; each thread has its own register state and program counter. Threads are grouped 32 at a time into warps; warps are the unit of instruction issue on the hardware (every cycle the scheduler picks a ready warp and issues one instruction across its 32 lanes). Warps are bundled into CTAs (also called thread blocks); a CTA runs entirely on one SM, can have between 1 and 32 warps, and owns the SMEM allocated to that CTA. CTAs are bundled into clusters of 1-16 (the default cluster size is 1, in which case the cluster level is invisible); all CTAs in a cluster co-reside on physically adjacent SMs and can talk to each other through the cluster interconnect (DSMEM, distributed SMEM). Clusters are bundled into a grid, which is the unit of work launched by a single kernel invocation.</p>
+<p>Synchronization scopes are aligned with this hierarchy: <code>__syncthreads()</code> syncs the CTA, <code>barrier.cluster.*</code> syncs the cluster, no built-in mechanism syncs the grid (you have to launch a separate kernel for grid synchronization, or use the cooperative-groups API).</p>
+<h3 class="topic" id="spatial-temporal-cache-locality">Spatial/Temporal Cache Locality</h3>
+<p>Cache locality refers to the property that recently used or nearby data is more likely to be needed again soon. Spatial locality means that if a program accesses address X, it is likely to access addresses near X soon after — this is what coalesced loads exploit, and what makes 128B cache lines a useful granularity. Temporal locality means that if a program accesses address X, it is likely to access X again soon — this is what keeps &quot;hot&quot; data in L1/L2.</p>
+<p>Cache-aware kernel design tries to maximize both. In GEMM kernels the B-operand cache locality is the easy win: the same B tile is multiplied against every A row of the result tile, so as long as the B tile fits in SMEM (or L2 for a multi-CTA case), you only pay for one B load per output column. In GEMV the A matrix is read once and discarded, so spatial locality (coalesced loads) matters but temporal locality on A does not. The Cache Hint feature (covered separately) lets the kernel give the hardware explicit guidance about temporal locality on specific operands.</p>
+<h3 class="topic" id="operator-kernel-fusion">Operator/Kernel Fusion</h3>
+<p>Kernel fusion is the practice of combining multiple logical operations into a single GPU kernel launch, eliminating the intermediate round-trips through GMEM and the launch overhead between them. The naive implementation of <code>silu(A @ B1) * (A @ B2)</code> in the Dual GEMM section is three kernels: one for each matmul, plus one for the elementwise silu/multiply. The fused implementation does the same work in one kernel that keeps both GEMM accumulators live in TMEM and applies the elementwise ops on the way to GMEM, saving two kernel launches and two round-trips of the intermediate matrices.</p>
+<p>The trade-off is per-kernel resource usage. A fused kernel needs SMEM / TMEM / registers for *all* of the fused operands at once; if any of those resources becomes the occupancy limiter, performance can regress. The Group GEMM kernel in this blog is the most extreme example of fusion in the project — <code>g</code> independent GEMM operations get fused into one kernel launch, with per-tile descriptor patching (<code>tensormap.replace</code>) or per-group pre-encoded tensormaps used to route each CTA to the right data buffers. The launch overhead saved at G=8 is ~2us, which is significant on problems where the kernel itself only takes ~10us.</p>
+<h3 class="topic" id="occupancy-occupancy-limiter">Occupancy / Occupancy Limiter</h3>
+<p>Occupancy is the number of warps a single SM is running concurrently, expressed either as an absolute count or as a fraction of the SM&#x27;s maximum supported warps (64 on Blackwell). High occupancy lets the SM hide latency: while one warp is stalled on a memory load or a TMA completion, the scheduler can pick another ready warp and keep issuing instructions.</p>
+<p>A kernel&#x27;s occupancy is set at compile/launch time by whichever resource runs out first. The three usual occupancy limiters are:</p>
+<pre class="diagram">  Registers per thread -- 65536 per SM / threads-per-CTA / CTAs-per-SM
+  SMEM per CTA          -- ~228KB per SM on Blackwell
+  Threads per CTA       -- 2048 thread per SM</pre>
+<p>The compiler reports per-thread register usage with <code>-Xptxas -v</code>; Nsight Compute&#x27;s &quot;Occupancy&quot; page reports which resource is the active limiter. Note that high occupancy isn&#x27;t an end in itself — it&#x27;s only useful when the kernel actually has parallelizable work to interleave. Many tcgen05 kernels run at low occupancy (a few warps per SM) and still saturate the tensor cores because the in-flight TMA and MMA operations carry their own internal pipelining.</p>
+<p>Difference between theoretical and achieved occupancy - the above is &quot;theoretical occupancy&quot; defined statically at compile time by the resource demand of the kernel. &quot;Achieved occupancy&quot; is the average percentage of warps out of the theoretical maximum that remain &quot;active&quot; on the SM. A warp is &quot;active&quot; if it is running or ready to run (i.e. not stalled).</p>
+<h3 class="topic" id="general-nvidia-gpu-compute-architecture-blackwell">General NVIDIA GPU Compute Architecture (Blackwell)</h3>
+<p>Blackwell is the NVIDIA architecture introduced with the B100 / B200 / GB200 chips. From the compute side the relevant building block is the streaming multiprocessor (SM); a B200 chip has 148 SMs.</p>
+<p>Each SM contains:</p>
+<p>- 128 CUDA cores (FP32/INT lanes) organized into 4 sub-partitions - 4 warp schedulers, one per sub-partition - One tensor core unit, accessed via the tcgen05 instruction family - 256KB of tensor memory (TMEM), accessed only by tensor cores - 228KB of shared memory (configurable carveout shared with L1 cache) - 65536 32-bit registers in a unified register file</p>
+<p>The tensor core is what makes Blackwell distinctive for ML workloads: it implements block-scaled MMA operations natively for FP4/FP6/FP8 inputs, with the scale factors and the accumulator both living in TMEM. The tcgen05.mma instruction (covered in detail in the GEMM section) is the gateway to this hardware.</p>
+<h3 class="topic" id="general-nvidia-gpu-memory-architecture-blackwell">General NVIDIA GPU Memory Architecture (Blackwell)</h3>
+<p>The memory hierarchy on Blackwell is six levels deep, from largest / slowest to smallest / fastest:</p>
+<pre class="diagram">  HBM3e (GMEM)   -- 192 GB on a B200; bandwidth ~8 TB/s; latency ~1us
+  L2              -- ~60MB on a B200; bandwidth ~14 TB/s; latency ~200ns
+  L1 / SMEM      -- 228KB per SM; configurable carveout; latency ~30ns
+  TMEM           -- 256KB per SM; accessible only by tensor cores
+  Registers      -- 256KB per SM (65536 x 32b); per-thread; latency ~5ns
+  DSMEM          -- the cluster interconnect that lets one CTA address another CTA&#x27;s SMEM in the same cluster; latency is in between L1 and L2.</pre>
+<p>Kernel design is largely about choosing which level of the hierarchy each piece of data lives in. The naive approach (everything in GMEM, loaded into registers as needed) is dominated by HBM bandwidth on most workloads; the Blackwell-optimized approach uses TMA to bring tiles GMEM-&gt;SMEM asynchronously, uses tcgen05 to keep accumulators in TMEM, uses SMEM as a staging buffer between TMEM and the TMA store engine, and only touches the register file for elementwise post-processing.</p>
+<h3 class="topic" id="tail-effect-waves">Tail Effect / Waves</h3>
+<p>A &quot;wave&quot; is one round of CTAs running concurrently on the GPU. If a B200 with 148 SMs can hold one CTA each at the kernel&#x27;s resource requirements, then launching 296 CTAs runs as two waves: wave 1 fills all 148 SMs, then wave 2 takes their place.</p>
+<p>Tail effect is the inefficiency that shows up when the total number of CTAs isn&#x27;t an even multiple of the wave size. Launching 149 CTAs runs the same wall-clock time as 296 CTAs, because the leftover CTA spends a whole wave&#x27;s worth of time blocking the kernel from finishing. The fewer total waves a kernel has, the more pronounced the tail effect is in relative terms — a kernel that takes 5 waves with a 30%-full final wave loses 6% of its theoretical throughput; a kernel that takes 1 wave with a 30%-full single wave loses 70%.</p>
+<p>Persistent kernels (covered in the Group GEMM section) eliminate the tail effect entirely by having each CTA loop over multiple work tiles, so the kernel&#x27;s runtime is determined by total work divided by wave size rather than by ceil(work / wave_size).</p>
+<h3 class="topic" id="split-k">Split-K</h3>
+<p>Split-K is a parallelization strategy for matrix multiplication that splits the K-dimension across multiple CTAs (or threads). Each shard computes a partial accumulation A[m, k0:k1] @ B[k0:k1, n], and at the end the partial results are summed into the final result. Split-K trades a small amount of extra work (the reduction) for more parallelism on problem shapes where M and N are small relative to K.</p>
+<p>The reduction can happen at several scopes:</p>
+<p>- Within a CTA: each thread/warp produces a partial sum, which is reduced via SMEM and warp shuffles. This is what GEMV V2/V3 do. - Across CTAs in a cluster: partial sums land in DSMEM and are reduced cluster-locally before the final write. This is what the failed Dual GEMM V5 experiment attempted. - Across the whole grid: partial sums land in a GMEM workspace and a second kernel reduces them. This is what Dual GEMM V3 and the failed Group GEMM split-K experiment use.</p>
+<p>The cost of split-K scales with the reduction scope: in-CTA is nearly free, cluster-local adds DSMEM bandwidth, grid-wide adds GMEM bandwidth and a kernel launch. Whether split-K wins depends entirely on whether the parallelism gain outweighs the reduction cost for the given problem shape.</p>
+<h3 class="topic" id="shared-memory">Shared Memory</h3>
+<p>Shared memory (SMEM) is per-CTA scratchpad memory that lives on the SM. On Blackwell each SM has 228KB of combined L1/SMEM, configurably split; in practice the kernels in this blog set the L1/SMEM carveout via <code>cudaFuncSetAttribute(..., cudaFuncAttributePreferredSharedMemoryCarveout, cudaSharedmemCarveoutMaxShared)</code> so that ~228KB is available to SMEM.</p>
+<p>SMEM is organized into 32 banks, each 4 bytes wide. A warp can read or write 32 different banks in one cycle without conflict; if two threads in a warp hit the same bank with different addresses, the access serializes (a &quot;bank conflict&quot;) and the warp pays a cycle for each conflict. The Swizzle modes covered separately are how the hardware remaps SMEM accesses to avoid bank conflicts on tcgen05 / TMA accesses.</p>
+<p>SMEM is also the only memory level that participates in the <code>shared::cluster</code> qualifier — when a TMA instruction loads to <code>shared::cluster</code>, the destination is a DSMEM address that may be on a peer CTA&#x27;s SMEM. This is what enables TMA multicast and DSMEM-backed reductions.</p>
+<h3 class="topic" id="swizzling-and-swizzle-modes">Swizzling and Swizzle Modes</h3>
+<p>Swizzling is the practice of remapping the SMEM addresses used to store a matrix tile so that subsequent warp-level loads/stores don&#x27;t collide on SMEM banks. The PTX tcgen05 / TMA APIs support several swizzle modes:</p>
+<pre class="diagram">  CU_TENSOR_MAP_SWIZZLE_NONE   -- linear layout
+  CU_TENSOR_MAP_SWIZZLE_32B    -- 32-byte swizzle
+  CU_TENSOR_MAP_SWIZZLE_64B    -- 64-byte swizzle
+  CU_TENSOR_MAP_SWIZZLE_128B   -- 128-byte swizzle</pre>
+<p>The swizzle mode is encoded into the TMA descriptor at host-side encode time; it also affects the matrix descriptor&#x27;s LBO/SBO computation (the &quot;core matrix&quot; shape changes from 8x16B in no-swizzle mode to 8x128B in 128B-swizzle mode). The relevant detail at the kernel level is that choosing a swizzle mode is mostly a question of which tile widths fit the available bandwidth: 128B swizzle gives the best bank-conflict behavior for large tiles, while smaller swizzle modes are useful when the tile width is narrow enough that 128B would waste SMEM.</p>
+<p>For NVFP4 GEMM the kernels in this blog default to 128B swizzle for the A and B operand tiles, because both are large enough (typically 128x256 or larger) to benefit. The Group GEMM V18 transposed-output experiment uses 64B swizzle for a narrower tile.</p>
+<h3 class="topic" id="hardware-utilization">Hardware Utilization</h3>
+<p>Hardware utilization is the measure of how much of the GPU&#x27;s theoretical peak you&#x27;re actually getting. It can be sliced several ways:</p>
+<p>- SM occupancy: what fraction of SMs are running any work - Per-SM throughput: what fraction of the SM&#x27;s tensor-core / FP32 / memory peak the kernel is hitting on the SMs it does occupy - Wave utilization: how full the last wave of CTAs is</p>
+<p>A kernel that launches 8 CTAs on a 148-SM GPU has at most 5% SM occupancy regardless of how efficient those 8 CTAs are; a kernel that launches 148 CTAs but only uses 5% of each SM&#x27;s tensor core throughput has 100% SM occupancy and 5% per-SM throughput. The right metric to chase depends on the workload: GEMV-class problems usually have plenty of work to fill SMs but low per-SM throughput because matrix-vector products are bandwidth-bound; tcgen05 GEMM on small shapes can have near-peak per-SM throughput but few CTAs to launch.</p>
+<p>The persistent kernel design pattern (and CLC) addresses both at once: launch exactly enough CTAs to fill the GPU once, then have each CTA loop over multiple output tiles.</p>
+<h3 class="topic" id="nvcc-compiler-flags-for-optimization">NVCC Compiler Flags for Optimization</h3>
+<p>The kernels in this blog use a handful of NVCC and ptxas flags worth calling out:</p>
+<pre class="diagram">  -gencode=arch=compute_100a,code=sm_100a
+       Targets the Blackwell (sm_100a) architecture specifically. The `a` suffix means &quot;architecture-accelerated&quot; — features like tcgen05 only compile under sm_XX0a.
+
+  -Xptxas, --allow-expensive-optimizations=true
+       Allows ptxas to spend more compile time on instruction scheduling, register allocation, and constant folding. Produced a &gt;2x speedup on the GEMV V6_2_2 kernel by collapsing FP4/FP8 conversion sequences into more compact PTX.
+
+  --relocatable-device-code=false (i.e., -rdc=false)
+       Disables device-side linking, which lets ptxas perform whole-program optimization rather than emitting linkable stubs. Generally improves register allocation slightly.
+
+  -Xptxas -v
+       Prints register usage, SMEM usage, and spill statistics per function. The standard diagnostic for &quot;why isn&#x27;t this compiling at the occupancy I expected?&quot;</pre>
+<p>The GEMV V6_2_2 entry has the most striking demonstration: a single-line code change combined with the <code>--allow-expensive-optimizations=true</code> flag was responsible for a ~50% latency reduction.</p>
+<h3 class="topic" id="nsight-compute-ncu">Nsight Compute (NCU)</h3>
+<p>Nsight Compute is NVIDIA&#x27;s kernel-level profiler. It instruments a single kernel launch and produces a structured report with sections for SM utilization, memory bandwidth, occupancy, source-level instruction mix, roofline analysis, and per-warp stall reasons.</p>
+<p>Important caveats for kernels that use tcgen05 and single-thread launches:</p>
+<p>(a) NCU sees the executing thread, not the tensor core. tcgen05.mma is issued by one thread; the actual MMA work happens on hardware that NCU&#x27;s normal counters don&#x27;t expose. You see a long sequence of mbarrier waits and very few &quot;useful&quot; instructions per cycle, which the profiler may mis-flag as &quot;stalled&quot; even when the kernel is near-peak. The metrics worth looking at are mbarrier stalls (which section of the pipeline is the bottleneck), TMA throughput, and the L2 / HBM traffic counters.</p>
+<p>(b) NCU significantly perturbs kernel timing because it inserts instrumentation. Don&#x27;t trust the wall-clock timing reported by NCU; use CUDA events outside the profiled kernel for that.</p>
+<p>(c) The &quot;Source&quot; view of NCU on tcgen05-heavy kernels can be misleading because much of the work happens in a single asm volatile block, so all the SASS-level counters bucket into that single line.</p>
+<p>In the GEMV V6_2_4 entry I describe how mis-reading NCU&#x27;s &quot;Arithmetic instruction&quot; attribution sent me in the wrong direction for several kernel iterations before I uncovered the actual bottleneck (FP4/FP8 conversion intrinsics generating dozens of LOP3/PRMT/IMAD instructions).</p>
+<h3 class="topic" id="latency-hiding-and-software-pipelining">Latency Hiding and Software Pipelining</h3>
+<p>Latency hiding is the practice of issuing slow operations early enough that something else can run while they complete. GPUs hide latency in two main ways:</p>
+<p>(a) Warp-level: the SM has many concurrent warps, and when one warp stalls (e.g., on a memory load) the scheduler picks another. This is what high occupancy buys you — more warps means more candidates to swap in.</p>
+<p>(b) Software-level: explicit pipelining where the producer (TMA) and consumer (MMA) run on different warps with multiple SMEM buffers, and the producer races ahead to fill future buffers while the consumer is still working on current ones. This is what N-stage ring buffers and pipeline depth (PIPE_STAGES) achieve.</p>
+<p>The N-stage software pipeline is the dominant pattern in tcgen05 kernels. The producer warp (TMA) fills PIPE_STAGES buffers ahead; the consumer warp (MMA) processes them in order; mbarriers track which stages are ready for consumption and which buffers are free to overwrite. Tuning PIPE_STAGES is a trade-off between latency hiding (higher is better) and SMEM occupancy (higher means less SMEM for other things).</p>
+<p>Cross-tile pipelining (introduced in Group GEMM V11/V15) extends this across work-tile boundaries: the producer doesn&#x27;t drain the pipeline between tiles, so TMA loads for the next tile begin while the current tile&#x27;s MMA is still running. The complementary technique is TMEM ping-pong (Group GEMM V13/V16/V22), which decouples the MMA-&gt;epilogue handoff in the same way.</p>
+<h3 class="topic" id="asynchronous-mechanisms-details">Asynchronous Mechanisms Details</h3>
+<pre class="data">&quot;Asynchronous&quot; on Blackwell means hardware-level: the instruction returns to the issuing thread immediately, and the actual work runs on a separate hardware unit (TMA engine, tensor core, etc.) that completes some time later. The kernel synchronizes with that hardware unit via an mbarrier.</pre>
+<p>The async instructions used in this blog are:</p>
+<pre class="diagram">  cp.async.bulk{.tensor}.*        -- TMA loads/stores; tracked by mbarrier
+  cp.async.bulk.commit_group +
+  cp.async.bulk.wait_group        -- bulk-group tracking for TMA stores
+  tcgen05.mma                     -- tensor core MMA; tracked by mbarrier via tcgen05.commit
+  tcgen05.cp                      -- SMEM-&gt;TMEM copy; ordered against subsequent tcgen05.mma by hardware rules, no explicit fence needed
+  tcgen05.ld                      -- TMEM-&gt;register load; tracked by tcgen05.wait::ld
+  clusterlaunchcontrol.try_cancel -- CLC work-steal; tracked by mbarrier</pre>
+<p>Each of these has a slightly different completion-tracking mechanism, but the pattern is consistent: issue → wait → consume. The producer-consumer mbarrier dance (covered under Memory Consistency) is the glue.</p>
+<h3 class="topic" id="tma-details">TMA Details</h3>
+<p>The Tensor Memory Accelerator (TMA) is a dedicated hardware unit on each SM that performs asynchronous, multi-dimensional tensor transfers between GMEM and SMEM/DSMEM. TMA is the modern replacement for the older <code>cp.async</code> family — same idea but with native support for strided multi-D tiles, swizzling, and built-in mbarrier completion tracking.</p>
+<p>Key TMA instructions:</p>
+<pre class="diagram">  cp.async.bulk.tensor.{1,2,3,4,5}d.{...}    -- multi-D tile transfer
+  cp.async.bulk.tensor.*.multicast::cluster  -- TMA Multicast variant
+  cp.async.bulk{.tensor}                     -- 1D bulk (used for SF)</pre>
+<p>Every TMA tensor instruction takes a *tensor map* (<code>CUtensorMap</code>, also called a &quot;TMA descriptor&quot;). The tensor map is a 128-byte opaque struct encoded by the CUDA driver API (<code>cuTensorMapEncodeTiled</code>) that describes:</p>
+<p>- The base GMEM address - The full GMEM shape (3D, 4D, etc.) and per-dim strides - The tile shape that this descriptor produces in SMEM - The swizzle mode - The element type and interleaving format</p>
+<p>The tensor map is opaque because its layout is hardware-dependent and not part of the stable ABI; you can&#x27;t initialize one in device code by hand. You can, however, modify selected fields of an existing tensor map from device code using <code>tensormap.replace</code> (introduced in Group GEMM V6), which is what enables per-CTA per-tile descriptor patching for variable-shape problems like Group GEMM.</p>
+<p>Completion tracking: TMA loads use the <code>mbarrier::complete_tx::bytes</code> mechanism — every TMA load tells its associated mbarrier how many bytes it transferred, and the mbarrier flips its phase when the expected total has arrived (set by <code>mbarrier.arrive.expect_tx</code>). TMA stores use a different mechanism, <code>cp.async.bulk.commit_group</code> + <code>cp.async.bulk.wait_group N</code>, which batches all in-flight TMA stores into a group and waits for the group as a whole to complete.</p>
+<h3 class="topic" id="tensor-memory-tmem">Tensor Memory (TMEM)</h3>
+<p>Tensor Memory (TMEM) is a per-SM 256KB memory region that exists specifically to feed and receive data from the Blackwell tensor cores. Architecturally it sits between SMEM and the register file in the memory hierarchy; functionally it&#x27;s only addressable by tcgen05 instructions, not by ordinary loads/stores.</p>
+<p>TMEM is organized as 128 rows (called &quot;lanes&quot;) of 512 columns, where each cell is 32 bits. Allocation happens via <code>tcgen05.alloc</code>, which carves out a contiguous range of *columns* (all 128 lanes) and returns the column-index of the allocation. Per the PTX rules, allocations must be a power-of-2 number of columns with a minimum of 32.</p>
+<p>What goes in TMEM:</p>
+<p>- The MMA accumulator (the <code>d-tmem</code> operand of tcgen05.mma) — laid out as M rows x N columns of FP32 values for an MxN tile. - Block scale factors (SFA, SFB) — laid out in a special 32x4x4-style format dictated by the MMA hardware.</p>
+<p>What does NOT go in TMEM:</p>
+<p>- Input matrix data (A, B); these stay in SMEM and are passed to <code>tcgen05.mma</code> via matrix descriptors that point into SMEM.</p>
+<p>The TMEM Multi-buffering glossary entry (later) covers how the kernels in this blog allocate 2 or 3 distinct result regions in TMEM to overlap MMA on the current tile with the epilogue&#x27;s TMEM read of the previous tile.</p>
+<h3 class="topic" id="cta-group-details">CTA_GROUP Details</h3>
+<p>CTA_GROUP is a PTX qualifier (<code>.cta_group::1</code>, <code>.cta_group::2</code>) that appears on many tcgen05 instructions and on TMA instructions. It controls how many CTAs in a cluster collaborate on a single operation:</p>
+<pre class="diagram">  .cta_group::1 -- single-CTA scope (the default for most use cases). The instruction&#x27;s effect is local to this CTA.
+  .cta_group::2 -- two-CTA scope. The two CTAs of a 2-CTA cluster collaborate on the operation, splitting the work across both SMs.</pre>
+<p>For <code>tcgen05.mma.cta_group::2</code> (&quot;2SM MMA&quot; in NVIDIA marketing materials), the M dimension of the MMA is doubled relative to the single-CTA form, with each CTA owning half of the resulting TMEM accumulator. The MMA hardware on the two SMs collaborates over the cluster interconnect to combine A from one CTA&#x27;s SMEM with B from the other&#x27;s. The Dual GEMM V2 kernel uses this to halve the per-CTA SMEM pressure for B, which lifts occupancy and lets the software pipeline go deeper.</p>
+<p>For TMA, <code>.cta_group::2</code> similarly indicates that the load should be attributed to both CTAs of the cluster — important for the mbarrier arrival accounting when the two CTAs are sharing the loaded tile.</p>
+<p>Note that CTA_GROUP is distinct from TMA Multicast. Multicast also fans data out to multiple CTAs, but the *MMA itself* still runs on one CTA; CTA_GROUP::2 changes the MMA semantics.</p>
+<h3 class="topic" id="dsmem-details">DSMEM Details</h3>
+<p>DSMEM (Distributed Shared Memory) is the cluster-scope view of SMEM: every CTA in a cluster can read and write the SMEM of every other CTA in the same cluster, via a special address space tag (<code>shared::cluster</code>). Physically the access goes over the cluster interconnect, which is much faster than going through L2/GMEM but slower than local SMEM.</p>
+<p>DSMEM is the mechanism that lets:</p>
+<p>- TMA Multicast deliver the same data to multiple CTAs (the destination address is a DSMEM address that resolves to the same SMEM offset on each receiver). - Multi-CTA reductions write partial results into DSMEM and reduce them cluster-locally, without going through GMEM. - 2SM tcgen05.mma instructions share A or B tiles between the two CTAs of a 2-CTA cluster.</p>
+<p>A few syntactic markers signal DSMEM usage:</p>
+<pre class="diagram">  cp.async.bulk.tensor.*.shared::cluster.*    -- DSMEM destination
+  mbarrier.arrive.*.shared::cluster.*          -- arrival on a DSMEM mbar
+  tcgen05.commit.*.shared::cluster.*           -- DSMEM-scope commit</pre>
+<p>The trade-off with DSMEM is twofold: clusters must be co-launched onto physically adjacent SMs, which constrains scheduling; and the cluster size is capped at 16, so DSMEM doesn&#x27;t scale as a substitute for L2/GMEM communication. For matrix multiplication it&#x27;s a near-perfect fit because clusters of 2-8 CTAs map naturally onto the cooperative-MMA patterns the tensor cores already support.</p>
+<h3 class="topic" id="memory-consistency-and-synchronization-details">Memory Consistency and Synchronization Details</h3>
+<p>The Blackwell memory consistency model has three pieces that the kernels in this blog interact with: mbarriers, fences, and proxies.</p>
+<p>Mbarriers (memory barriers, but they&#x27;re more like a hybrid of a barrier and an asynchronous counter than a classical lock). An mbarrier is a 64-bit object in SMEM with three pieces of state:</p>
+<p>- Expected arrival count (initialized via <code>mbarrier.init</code>) - Expected byte count (set by <code>mbarrier.arrive.expect_tx</code>) - Phase bit (flipped each time the barrier &quot;completes&quot;)</p>
+<p>A producer signals arrival with <code>mbarrier.arrive</code> (decrements arrival count) or, for TMA, via the <code>mbarrier::complete_tx::bytes</code> qualifier on the TMA instruction (decrements arrival count by 1 *and* decrements byte count by the bytes transferred). When both counters hit zero, the phase bit flips. Consumers spin on <code>mbarrier.try_wait.parity</code>, which returns true once they observe the expected phase. The phase tracking is what allows a single mbarrier to be reused for many producer-consumer rounds without re-initialization — each round flips the phase, and the consumer expects the next phase value.</p>
+<p>Fences. The Blackwell ISA has several kinds of fences:</p>
+<pre class="diagram">  fence.proxy.{kind}.{scope}         -- memory-proxy fence
+  fence.mbarrier_init.release.cluster -- mbarrier init visibility
+  tcgen05.fence::after_thread_sync   -- tcgen05 instruction ordering</pre>
+<p>Proxies. Blackwell has multiple &quot;memory access proxies&quot;, each with its own coherence domain:</p>
+<pre class="diagram">  generic proxy   -- ordinary loads/stores
+  async proxy     -- TMA / cp.async.bulk operations
+  tensormap proxy -- CUtensorMap descriptor accesses</pre>
+<p>A release through one proxy is not automatically visible to a subsequent access through another. The standard pattern is a <code>fence.proxy.{target_proxy}.{scope}</code> between writes through one proxy and reads through the other. The <code>tensormap.cp_fenceproxy</code> instruction (Group GEMM V6) is a specialized combined copy + proxy fence used specifically for <code>tensormap.replace</code> flows.</p>
+<h3 class="topic" id="warp-specialization">Warp Specialization</h3>
+<p>Warp specialization is the practice of assigning different roles to different warps within a CTA. Pre-tcgen05 kernels typically used the same code path for every warp (one warp = one block of threads); tcgen05 kernels generally don&#x27;t, because most tcgen05 operations are issued by a single thread anyway, so dedicating warps to disjoint roles lets each warp&#x27;s instruction stream focus on one phase of the software pipeline.</p>
+<p>The canonical tcgen05 GEMM kernel has three roles:</p>
+<pre class="diagram">  TMA warp           -- 1 warp; issues TMA loads, manages mbar_addr_tma / mbar_addr_mma producer-consumer
+  MMA warp           -- 1 warp; issues tcgen05.cp + tcgen05.mma, signals mbar_addr_epi when done
+  Epilogue warps     -- 4 warps; load TMEM via tcgen05.ld, convert to FP16, store to GMEM (either directly or via a TMA store)</pre>
+<p>Group GEMM V17 adds a fifth role:</p>
+<pre class="diagram">  Tile-descriptor warp -- 1 warp; resolves (group, m_off, n_off, sfa, sfb, M) for upcoming tiles and publishes via SMEM slots gated by mbar_addr_tile_ready</pre>
+<p>The roles communicate exclusively through mbarriers (and, for the tile-descriptor warp, through SMEM-published metadata). Each role&#x27;s code path is a tight loop optimized for that role&#x27;s instruction mix — the TMA warp is dominated by <code>cp.async.bulk.tensor</code> instructions, the MMA warp by <code>tcgen05.mma</code>, the epilogue warps by <code>tcgen05.ld</code> + half2 stores. Crossing role boundaries inside the same warp would force the compiler to merge those instruction streams and produces worse scheduling.</p>
+<h3 class="topic" id="cache-hint-details">Cache Hint Details</h3>
+<p>PTX TMA and bulk-async instructions accept an optional cache hint operand that tells the L2 cache replacement policy how the data is expected to be reused. The hint is supplied via the <code>L2::cache_hint</code> qualifier and a 64-bit policy value:</p>
+<pre class="diagram">  EVICT_NORMAL    -- default behavior; data competes for cache space normally
+  EVICT_FIRST     -- data is unlikely to be reused; evict early
+  EVICT_LAST      -- data is likely to be reused; keep in cache longer
+  EVICT_UNCHANGED -- don&#x27;t update the eviction priority</pre>
+<p>For matrix multiplication these hints map naturally onto operand re-use patterns. In Dual GEMM, the A matrix is read multiple times (once for each of A @ B1 and A @ B2 within a single tile, and again across multiple output tiles); B1 and B2 are read once per tile and then discarded. So A loads get <code>EVICT_LAST</code> and B loads get <code>EVICT_FIRST</code>. The hint doesn&#x27;t change correctness — it&#x27;s a performance optimization that becomes meaningful once L2 pressure is non-trivial.</p>
+<h3 class="topic" id="data-layout">Data Layout</h3>
+<p>Several non-obvious data layout constraints come up in tcgen05 kernels:</p>
+<p>(a) Core matrix layout for A/B in SMEM. The tensor core hardware expects tiles in SMEM laid out as &quot;core matrices&quot; — 8x16B (or 8x32B / 8x64B / 8x128B depending on swizzle mode) atomic units, with K-major core-matrix ordering. The TMA&#x27;s 3D transfer mode is the canonical way to produce this layout from a row-major GMEM matrix. The Group GEMM section discusses the <code>{32, mn_dim, k_dim/32}</code> 3D shape that gives the right layout.</p>
+<p>(b) Scale factor 32x4x4 layout in TMEM. SFA / SFB scale factors have an unusual repeated-row layout in TMEM dictated by the MMA hardware. The competition inputs were pre-reshuffled into this layout, so the kernels in this blog can load them with simple 1D contiguous TMA transfers (<code>tcgen05_1dtma_g2s_sf</code>); a more general kernel would need a 3D TMA with the right strides.</p>
+<p>(c) Output tile layout for C in SMEM. The TMA store engine expects the SMEM output tile in a layout compatible with the target tensor map. In the Group GEMM kernel the SMEM C tile is laid out as TD_SMEM_M x OUT_N_CHUNK halves, written by the epilogue&#x27;s <code>tcgen05.ld</code> + half2 stores, then transferred to GMEM by a 2D TMA store with the C tensor map.</p>
+<p>The transposed-output experiments (Group GEMM v6_3 / V18) are the most layout-intensive parts of the blog because they swap many of the assumptions about who is row-major vs column-major.</p>
+<h3 class="topic" id="host-device-data-transfer-details">Host/Device Data Transfer Details</h3>
+<p>Three mechanisms appear in this blog for moving data between host and device memory:</p>
+<p>(a) <code>cudaMemcpy</code> / <code>cudaMemcpyAsync</code>. The standard DMA path. The driver issues a DMA over PCIe (or NVLink, if available); the transfer goes through HBM on the device side. Async variants let the H2D copy overlap with subsequent host-side work.</p>
+<p>(b) Pinned (page-locked) host memory via <code>cudaMallocHost</code>. Pinning removes the page-fault and intermediate-staging-buffer overheads from DMA, so <code>cudaMemcpyAsync</code> on pinned memory is ~2x faster than on pageable memory. The pinning cost is paid once at allocation, so it&#x27;s only a win for buffers that get reused across many kernel launches.</p>
+<p>(c) <code>__grid_constant__</code> kernel arguments. A CUDA C++ qualifier on a kernel parameter that places the argument in a constant memory bank broadcast to all CTAs in the grid. The argument is folded into the kernel launch parameters, capped at ~32KB. The Group GEMM V14 entry uses this to ship the entire GroupDescs table (including per-group pre-encoded tensormaps) without a separate <code>cudaMemcpy</code>.</p>
+<p>There is a fourth mechanism not used in this blog: zero-copy mapped memory via <code>cudaHostAlloc(..., cudaHostAllocMapped)</code>, which gives the GPU a pointer into pinned host memory that it can read directly over PCIe. Zero-copy is useful for very small transfers where the DMA setup overhead exceeds the transfer time, but the per-access PCIe latency makes it a poor fit for the kernel hot path.</p>
+<h3 class="topic" id="device-memory-management">Device Memory Management</h3>
+<p>The kernel hot path should not contain allocator calls. <code>cudaMalloc</code> on the order of 5-10 microseconds — comparable to the kernel runtime itself for the small-shape benchmarks — and <code>cudaFree</code> is similar.</p>
+<p>Two patterns avoid allocator overhead:</p>
+<p>(a) Persistent buffers across calls. The kernel wrapper holds device-side buffers as <code>static</code> globals, allocates them lazily on the first call, and re-uses them on subsequent calls. The Group GEMM V3 entry (PersistentBuffers struct) is the canonical example. When the required size grows, the wrapper frees and re-allocates; otherwise it just re-uses. The trade-off is that the buffers stay allocated until process exit, which is generally fine for inference workloads.</p>
+<p>(b) <code>__grid_constant__</code> arguments (covered under Host/Device Data Transfer Details) sidestep allocation entirely for small metadata tables.</p>
+<p>The competition harness in this blog deliberately re-runs the kernel many times for benchmarking, which makes static persistent buffers a near-free optimization (the first call pays the allocation cost; subsequent calls reuse). For a one-shot kernel the trade-off is less clear-cut.</p>
+<h3 class="topic" id="cluster-launch-control-clc">Cluster Launch Control (CLC)</h3>
+<p>CLC is a Blackwell hardware feature that lets a kernel implement *dynamic* persistent scheduling: each CTA in the grid attempts to &quot;steal&quot; work from CTAs that haven&#x27;t been launched yet, and the hardware atomically cancels the launch of the stolen CTA.</p>
+<p>The PTX entry point is <code>clusterlaunchcontrol.try_cancel.async</code>:</p>
+<pre class="code"><code>clusterlaunchcontrol.try_cancel.async.shared::cta.mbarrier::complete_tx::bytes.b128 [addr], [mbar];</code></pre>
+<p>The instruction writes an opaque 128-bit response to SMEM (success plus the stolen CTA&#x27;s ctaid, or failure) and arrives on an mbarrier when complete. The CTA then queries the response with <code>clusterlaunchcontrol.query_cancel.is_canceled</code> and, if it succeeded, extracts the stolen ctaid with <code>clusterlaunchcontrol.query_cancel.get_first_ctaid::x.b32.b128</code>.</p>
+<p>CLC is the dynamic complement to static persistent scheduling (which assigns work tiles to CTAs based on <code>tile_idx % gridDim.x</code>). The advantage is automatic load balancing across CTAs whose tiles have varying work; the disadvantage is one mbarrier round-trip per tile boundary, which on small problem shapes can cost more than the static scheduler&#x27;s worst-case imbalance.</p>
+<p>The Group GEMM V8 entry introduces CLC; V11 uses it; V12 backs out of CLC for the static-persistent path because the per-tile overhead dominated on the small benchmark shapes.</p>
+<h3 class="topic" id="cluster-multicast-tma-group-gemm-v17">Cluster Multicast TMA (Group GEMM V17+)</h3>
+<p><code>cp.async.bulk.tensor.{...}.multicast::cluster.{...}</code> issues a single TMA load from HBM and fans the data out to multiple CTAs in a cluster via the cluster interconnect (DSMEM path). A 16-bit <code>ctaMask</code> operand selects which CTAs in the cluster receive the data: bit <code>i</code> set means &quot;deliver to CTA <code>i</code> in the cluster and arrive on its mbarrier&quot;.</p>
+<p>The mbarrier that tracks completion must be initialized with an arrival count equal to the number of receiving CTAs, because each receiving CTA records its own arrival. The corresponding <code>tcgen05.commit</code> uses <code>.multicast::cluster</code> so a single MMA completion releases the shared mbarrier on every CTA in the cluster.</p>
+<p>Used in Group GEMM V17 to halve HBM traffic on the A operand of a 2-CTA cluster: only the leader CTA issues the TMA, and the multicast delivers the same A tile to both CTAs. Distinct from 2SM tcgen05.mma (<code>.cta_group::2</code>), which is a different collaboration pattern entirely — multicast TMA only changes how input data is delivered; the MMA itself still runs on a single CTA.</p>
+<h3 class="topic" id="tmem-multi-buffering-ping-pong-group-gemm-v13">TMEM Multi-buffering / Ping-pong (Group GEMM V13+)</h3>
+<p>Allocating 2 or 3 distinct TMEM regions for results, indexed by a rotating <code>tmem_buf</code> counter (XOR for 2-deep, modulo for 3-deep). Lets the MMA warp write into one region while the epilogue warps read from another, decoupling the long TMEM-&gt;reg-&gt;half-&gt;SMEM-&gt;TMA chain from the MMA critical path.</p>
+<pre class="code"><code>tcgen05_alloc_tmem&lt;1&gt;(tmem_addr_ptr, TD_MMA_N * 2 * NUM_BUFFERS);
+const int tmem_result_ptrs[NUM_BUFFERS] = { ... };
+// MMA warp: tmem_buf = (tmem_buf + 1) % NUM_BUFFERS; write to result_ptrs[tmem_buf]
+// Epilogue:  tmem_buf = (tmem_buf + 1) % NUM_BUFFERS; read from result_ptrs[tmem_buf]
+// Synchronization: NUM_BUFFERS pairs of (epi, epi_done) mbarriers,
+//                  each pair indexed by tmem_buf</code></pre>
+<p>Each TMEM region needs its own <code>epi</code> / <code>epi_done</code> mbarrier pair with independent phase counters. Getting the phase tracking wrong is the most common correctness/hang trap in this blog — see sub_v6_tmem_circ and submission_v5_static_overlap. For 2-deep, XOR with a <code>first_tile</code> guard on the consumer side is enough; for 3-deep, modulo arithmetic plus a <code>primed</code> flag works.</p>
+<p>2-deep introduced in Group GEMM V13; 3-deep in V22. The depth is constrained by total TMEM capacity (512 columns) and by what&#x27;s worth pipelining — the third buffer in V22 was a small win on top of the 2-deep design.</p>
+<h3 class="topic" id="cross-tile-tma-pipelining-group-gemm-v11">Cross-tile TMA Pipelining (Group GEMM V11+)</h3>
+<p>Carrying TMA pipeline state across work-tile boundaries using a monotonic <code>glob_k_off</code> counter plus a <code>first_tile</code> prologue:</p>
+<pre class="code"><code>int glob_k_off = 0;
+bool first_tile = true;
+for (int tile_idx = blockIdx.x; tile_idx &lt; total_tiles; tile_idx += gridDim.x) {
+    if (first_tile) {
+        // Pre-fill PIPE_STAGES of TMA loads
+        for (int s = 0; s &lt; PIPE_STAGES; s++) tma_load_stage(s * TD_SMEM_K, s);
+        glob_k_off = PIPE_STAGES * TD_SMEM_K;
+        first_tile = false;
+    }
+    for (; k_off &lt; K; k_off += TD_SMEM_K) {
+        int stage = (glob_k_off / TD_SMEM_K) % PIPE_STAGES;
+        // mbar_wait + tma_load_stage; glob_k_off keeps incrementing
+    }
+}</code></pre>
+<p>Eliminates the per-tile pipe-fill stall. The TMA producer mbarriers must be reusable across tiles (not re-init&#x27;d at each tile boundary), and the consumer&#x27;s mbarrier phase must be derived from <code>glob_k_off / TD_SMEM_K</code> so it stays in sync after a tile transition.</p>
+<p>Introduced in Group GEMM V11 (where it regressed slightly on small problem shapes), stabilized in V15 (where the per-tile overhead it removed dominated the new serial dependency it introduced).</p>
+<h3 class="topic" id="tile-descriptor-producer-warp-group-gemm-v17">Tile-descriptor Producer Warp (Group GEMM V17+)</h3>
+<p>A specialization of the Warp Specialization pattern. A dedicated warp resolves <code>(group, m_off, n_off, sfa_addr, sfb_addr, M)</code> for each upcoming work tile and publishes the values via SMEM slots, gated by an <code>mbar_addr_tile_ready</code> mbarrier. The TMA, MMA, and epilogue warps consume the published metadata instead of re-computing it.</p>
+<pre class="code"><code>// Tile-descriptor warp
+for (int t = 0; t &lt; tiles_per_cta; t++) {
+    int tile_idx = blockIdx.x + t * gridDim.x;
+    // Binary search groups[] for which group this tile belongs to
+    int group = ...; int m_off = ...; int n_off = ...;
+    // Publish to SMEM slots
+    group_smem[t % SLOTS] = group; m_off_smem[t % SLOTS] = m_off; ...
+    // Signal readiness
+    mbar_arrive(mbar_tile_ready + (t % SLOTS) * 8, ...);
+}</code></pre>
+<p>Removes redundant binary-search-for-group work from every other warp, and the resolution happens in parallel with the previous tile&#x27;s MMA. Distinct from CLC (which dynamically rebalances work across CTAs); the tile-descriptor warp only handles per-CTA tile sequencing, with the tile-to-CTA mapping fixed at launch by either static scheduling or CLC.</p>
+<h3 class="topic" id="grid-constant-kernel-arguments">__grid_constant__ Kernel Arguments</h3>
+<p>A CUDA C++ qualifier on a kernel parameter that places the argument in a constant-memory bank broadcast to all CTAs in the grid:</p>
+<pre class="code"><code>__global__ void nvfp4_group_gemm_kernel(
+    const __grid_constant__ GroupDescs groups,
+    const __grid_constant__ CUtensorMap tmap_a_temp,
+    ...
+);</code></pre>
+<p>Properties:</p>
+<p>- Free to read on the device side (constant memory cache hit) - Free to ship from host (folded into the existing kernel launch parameter path; no separate cudaMemcpy) - Capped at ~32KB total per kernel - Always read-only from device code</p>
+<p>Used in Group GEMM V14 to pass the per-group descriptor table (<code>GroupDescs</code> struct of up to MAX_G slots) as a kernel argument rather than a <code>cudaMallocHost</code> + <code>cudaMemcpyAsync</code> pair. By V17 the struct also embeds the pre-encoded per-group CUtensorMaps, eliminating the in-kernel <code>tensormap.replace</code> machinery entirely. The 32KB cap is well above the MAX_G = 8 slot requirement (<code>8 * (3 * 128B + small data) ≈ 3.5 KB</code>).</p>
+<h3 class="topic" id="named-barriers-bar-sync-n-m">Named Barriers (bar.sync N, M)</h3>
+<p><code>bar.sync</code> with explicit barrier-resource ID <code>N</code> (0..15) and thread count <code>M</code>:</p>
+<pre class="code"><code>bar.sync     a {, b};
+
+  a -- barrier resource (0..15)
+  b -- number of threads participating</code></pre>
+<p>CUDA&#x27;s <code>__syncthreads()</code> compiles to <code>bar.sync 0</code> (with all threads in the CTA participating, so the thread-count operand is implicit). The two-operand form lets a *subset* of warps synchronize among themselves without involving the rest of the CTA. The kernels in Group GEMM V12+ use this to let the epilogue warps ping-pong among themselves on barrier 2, while the TMA + MMA warps independently ping-pong on barrier 3:</p>
+<pre class="code"><code>// inside the epilogue warps
+asm volatile(&quot;bar.sync 2, %0;&quot; :: &quot;r&quot;(WARP_SIZE * (NUM_WARPS - 2)));
+
+// inside the TMA / MMA warps
+asm volatile(&quot;bar.sync 3, %0;&quot; :: &quot;r&quot;(WARP_SIZE * 2));</code></pre>
+<p>The threads participating in barrier N must agree on the thread-count value — if they don&#x27;t, the barrier deadlocks. Up to 16 named barriers are available per CTA, which is more than enough for the warp-specialization patterns used in this blog.</p>
+<h3 class="topic" id="cluster-scope-mbarrier-arrivals">Cluster-scope Mbarrier Arrivals</h3>
+<p>The default <code>mbarrier.arrive.expect_tx.release.cta.shared::cta.b64</code> helper used in the basic GEMM kernel can only arrive on a barrier local to this CTA. When a producer CTA needs to signal a barrier that lives on a peer CTA (or that is read by multiple CTAs via multicast), the helper is upgraded to cluster scope:</p>
+<pre class="code"><code>mbarrier.arrive.expect_tx.release.cta.shared::cluster.b64 _, [%0], %1;</code></pre>
+<p>The <code>.shared::cluster</code> qualifier reinterprets the mbarrier address as a DSMEM address — an SMEM address that may live on a peer CTA in the same cluster. The hardware routes the arrival through the cluster interconnect.</p>
+<p>Used in Group GEMM V17 alongside TMA Multicast and cluster-scope <code>tcgen05.commit.multicast::cluster.b64</code> so a single MMA completion arrives on the mbarriers of every CTA in the cluster. Without the cluster-scope arrival, the peer CTA&#x27;s mbarrier arrival count would under-count and <code>mbar_wait</code> would never return.</p>
+        </article>
+        <nav class="pager">
+            <a class="pgprev" href="/projects/nvfp4/nvfp4_group_gemm.html">← Group GEMM</a>
+            <a class="pgnext" href="/projects/nvfp4/nvfp4_kernel_dev.html">Kernel Dev Notes →</a>
+        </nav>
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span></p>
+        </div>
+    </main>
+</body>
+</html>

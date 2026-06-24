@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NVFP4 Kernels — Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main>
+        <article class="post">
+            <h1>Diving Deeper into ML Kernel Design</h1>
+            <p class="post-meta">NVFP4 on NVIDIA Blackwell · GPU Mode × NVIDIA Competition</p>
+            <p>
+                A detailed walkthrough of designing and optimizing machine-learning kernels for
+                the NVIDIA Blackwell architecture around the new NVFP4 4-bit data type. It covers
+                four kernel families — Batched GEMV, GEMM, Dual GEMM, and Group GEMM — from a
+                naive baseline through aggressive optimization, plus a standalone glossary of the
+                hardware and programming concepts involved and a distilled set of PTX / hardware
+                lessons that the official docs tend to leave out.
+            </p>
+            <p>
+                It is written both as a record of my own process and as a resource for anyone
+                working close to the metal on Blackwell. If you spot something technically
+                inaccurate, I'd genuinely like to hear about it —
+                <span style="color: var(--accent);">naregmegan@gmail.com</span>.
+            </p>
+            <div class="blogbar standalone">
+                <a href="https://github.com/NaregAmirianMegan/NVFP4_Kernels" target="_blank" rel="noopener noreferrer">View source on GitHub ↗</a>
+            </div>
+            <h2>Sections</h2>
+            <div class="toc">
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_intro.html">
+                <span class="toc-num">00</span>
+                <span class="toc-body">
+                    <span class="toc-title">Introduction</span>
+                    <span class="toc-desc">What this series covers, the GPU Mode x NVIDIA competition, and a primer on the NVFP4 data type and block scaling.</span>
+                </span>
+            </a>
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_batched_gemv.html">
+                <span class="toc-num">01</span>
+                <span class="toc-body">
+                    <span class="toc-title">Batched GEMV</span>
+                    <span class="toc-desc">Iterative optimization of a batched matrix-vector kernel: kernel fusion, split-K, coalescing, and chasing the memory-bound wall.</span>
+                </span>
+            </a>
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_gemm.html">
+                <span class="toc-num">02</span>
+                <span class="toc-body">
+                    <span class="toc-title">GEMM</span>
+                    <span class="toc-desc">Using tcgen05 tensor-core instructions on Blackwell, scale-factor formatting, the &#x27;core matrix&#x27; concept, and TMA data movement.</span>
+                </span>
+            </a>
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_dual_gemm.html">
+                <span class="toc-num">03</span>
+                <span class="toc-body">
+                    <span class="toc-title">Dual GEMM</span>
+                    <span class="toc-desc">Fusing silu(A @ B1) * (A @ B2) into a single kernel that keeps both accumulators live in TMEM.</span>
+                </span>
+            </a>
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_group_gemm.html">
+                <span class="toc-num">04</span>
+                <span class="toc-body">
+                    <span class="toc-title">Group GEMM</span>
+                    <span class="toc-desc">Fusing a group of differently-shaped GEMMs into one launch with per-tile tensormap patching and careful scheduling.</span>
+                </span>
+            </a>
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_glossary.html">
+                <span class="toc-num">05</span>
+                <span class="toc-body">
+                    <span class="toc-title">Glossary</span>
+                    <span class="toc-desc">Standalone reference entries for the architectural and programming concepts used throughout the series.</span>
+                </span>
+            </a>
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_kernel_dev.html">
+                <span class="toc-num">06</span>
+                <span class="toc-body">
+                    <span class="toc-title">Kernel Dev Notes</span>
+                    <span class="toc-desc">Process and tooling lessons: branch hygiene, tracking performance data, reading Nsight Compute for tcgen05, and using LLMs.</span>
+                </span>
+            </a>
+            <a class="toc-entry" href="/projects/nvfp4/nvfp4_ptx_lessons.html">
+                <span class="toc-num">07</span>
+                <span class="toc-body">
+                    <span class="toc-title">PTX &amp; HW Lessons</span>
+                    <span class="toc-desc">The hardest-won, least-documented lessons about PTX, CUDA, and Blackwell hardware, grouped by topic.</span>
+                </span>
+            </a>
+            </div>
+        </article>
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span></p>
+        </div>
+    </main>
+</body>
+</html>

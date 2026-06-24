@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kernel Dev Notes — Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="blogbar">
+            <a href="/projects/nvfp4/nvfp4_blog.html">← NVFP4 Kernels</a>
+            <a href="https://github.com/NaregAmirianMegan/NVFP4_Kernels" target="_blank" rel="noopener noreferrer">View source on GitHub ↗</a>
+        </div>
+        <article class="post">
+            <h1>Kernel Dev Notes</h1>
+            <p class="post-meta">NVFP4 Kernel Series · Section 6 of 7</p>
+<p>In this section I cover some procedural and engineering related learnings and improvements that will help me, and hopefully the reader as well, in any future kernel development endeavors.</p>
+<h3 class="topic" id="organization-of-different-dev-branches">Organization of different dev branches</h3>
+<p>Understanding how hardware works and interacts with software is both a theoretical and experimental process. All optimizations should be driven by theoretical improvement; however, the implementation in code, complex interactions with other hardware features, and timing dependent quirks can all influence how different the real performance impact is from the theoretical impact.</p>
+<p>Thus, it&#x27;s important to track both the theory and implementation alongside one another in a cohesive manner. This is definitely something I struggled with throughout this process because there were so many complex features to implement and track. One way this process could&#x27;ve been improved is by using git to track all of the modifications in different dev branches.</p>
+<p>For example, instead of creating iterative development files, a git branch would track the development of different features, and merging features would then become much easier to perform and track.</p>
+<p>Having this organizational structure would have allowed me to more easily merge and iterate on successful optimizations, while setting failed experiments aside (with the ability to easily revisit them later by merging the feature in with later iterations of the kernel).</p>
+<h3 class="topic" id="organization-of-performance-data">Organization of performance data</h3>
+<p>Building off of the last section it&#x27;s crucial to keep performance data in tandem with code versions. Additionally, I often found it helpful to collect the same set of information for all iterations of the kernel just in case seemingly irrelevant information becomes useful later on.</p>
+<p>Building a framework to collect my own metrics, which could be carried forward to further kernel iterations, was also crucial especially for kernels which use tensor cores (particularly tcgen05) and warp specialization.</p>
+<h3 class="topic" id="analyzing-performance-of-tensor-cores-especially-tcgen05-nor">Analyzing performance of tensor cores, especially tcgen05 (normal NCU numbers can be very misleading)</h3>
+<p>(See Glossary for further details on Nsight Compute)</p>
+<p>As NVIDIAs focus has shifted towards accelerating ML workloads, in particular deep learning, recent generations of NVIDIA architectures have started devoting more chip resources to tensor cores (tcgen05 and TMEM for Blackwell) and large bandwidth data movement between SMs and global memory (TMA and async transactions). This means fewer and less of a focus on CUDA cores: the array of tiny ALUs that previously composed most of the compute for NVIDIA chips.</p>
+<p>With this shift has come a change in the way modern kernels are programmed for NVIDIA chips. Optimizations using tcgen05, TMA, and concepts such as warp specialization have become far more prominent and useful (read more about these in the glossary and previous sections). However, some of the tooling shipped for NVIDIA developers hasn&#x27;t been updated to properly reflect these changes. The main example I encountered in developing these NVFP4 kernels was using Nsight Compute to analyze warp specialized tcgen05 kernels.</p>
+<p>If you attempt to analyze one of these kernels using NCU in the &quot;traditional&quot; way many of the statistics will be misleading:</p>
+<p class="note">Stall statistics can be skewed by the initial filling of the warp specialized pipeline. For example, an MMA kernel with three warp specialties of load, compute, and store will record the compute and store warps as stalled / idle until the first processing batch has been passed to it. This skew is especially pronounced for smaller problem sizes since those initial stalls make up a much larger portion of the overall runtime. Thus it&#x27;s important to take into account these skews when analyzing where the kernel is experiencing the most stalls outside of these &quot;priming&quot; stalls.</p>
+<p class="note">The software paradigm consists of launching asynchronous operations and waiting on their completion. This can skew active warps per cycle counts because although warps are technically active after initiating asynchronous work (TMA, tcgen05 MMA, etc...), they get recorded as idle for those interim cycles where warps are waiting for that work to complete.</p>
+<p class="note">Occupancy is a less reliable signal for how well hardware is being utilized. Due to the asynchronous nature of the instructions being used in combination with the demand for large portions of SMEM per CTA, these both drive down the theoretical and achieved occupancy below what one would expect for how well the hardware is actually being used via the async operations (see glossary for further details on theoretical and achieved occupancy).</p>
+<p>Something I need to look further into is what tools NCU provides to analyze tcgen05 and warp specialized kernels, or developing a tool for this myself.</p>
+<h3 class="topic" id="notes-on-using-llms-for-kernel-development">Notes on using LLMs for kernel development</h3>
+<p>I periodically used Claude Code and Codex to help in kernel development in the following ways:</p>
+<p class="note">Debug</p>
+<p>There were two use cases I found particularly useful when it came to AI assisted debugs:</p>
+<p>1) Simple logical and syntatical errors: Usually the LLM could identify the root cause very quickly. This dramatically reduced the amount of time and brain-power spent identifying trivial mis-types or PTX syntax errors (like swapping of impact parameters).<br>2) Deciphering long and complex system error reports: Error messages can be quite verbose, especially when the written code is at the assembly level. I used these agents to consolidate long system error log dumps and decipher or track register or memory corruption through those error reports. This made tracking down the root cause of those errors much more efficient.</p>
+<p>LLMs struggled the most when it came to more complex bugs related to synchronization and more recent hardware features (like the new features introduced in the Blackwell chip). Providing materials to be used in the model with RAG or grep improved the model&#x27;s understanding, but without a full contextual understanding of the features being discussed, it often missed out on key ideas that could cause bugs.</p>
+<p>An example debug that LLMs struggled with was the one I discuss in V15 of the group_gemm optimization log. The models didn&#x27;t recognize the race condition between SMEM stores and TMA stores to GMEM due to their operation on separate memory proxies.</p>
+<p class="note">Assisted Ideation</p>
+<p>Brainstorming with the help of AI can be helpful as it can double check the logic behind your ideas and suggest things you hadn&#x27;t thought of yet. I found this method of using AI better than having it code outright because implementing the key features yourself forces you to both fully understand everything about the code and verify any new ideas the AI generated (which could potentially be incorrect).</p>
+<p class="note">Code refactoring and organization</p>
+<p>LLMs are very good at refactoring and cleaning up the syntax of code to make it much cleaner and more readable, while keeping the underlying functionality the same. Of course, the larger the portion of code being re-written the more risk there is of small bugs or performance changes being introduced. For this reason I had the LLM restructure code in a chunked iterative manner, tackling smaller chunks of code to re-organize a larger section of code. That allowed me to verify correctness and performance remained unchanged.</p>
+        </article>
+        <nav class="pager">
+            <a class="pgprev" href="/projects/nvfp4/nvfp4_glossary.html">← Glossary</a>
+            <a class="pgnext" href="/projects/nvfp4/nvfp4_ptx_lessons.html">PTX &amp; HW Lessons →</a>
+        </nav>
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span></p>
+        </div>
+    </main>
+</body>
+</html>

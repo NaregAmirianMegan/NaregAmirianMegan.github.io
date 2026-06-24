@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Introduction — Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="blogbar">
+            <a href="/projects/nvfp4/nvfp4_blog.html">← NVFP4 Kernels</a>
+            <a href="https://github.com/NaregAmirianMegan/NVFP4_Kernels" target="_blank" rel="noopener noreferrer">View source on GitHub ↗</a>
+        </div>
+        <article class="post">
+            <h1>Introduction</h1>
+            <p class="post-meta">NVFP4 Kernel Series · Section 0 of 7</p>
+<p>Below I discuss my process writing kernels for the NVIDIA Blackwell architecture. I&#x27;m hoping this can add to the base of information available on how the NVIDIA Blackwell architecture works (especially for when the NVIDIA/PTX docs come up short, which in my opinion happens more often than one might like :) as well as how to optimize various types of kernels for the architecture.</p>
+<p>I&#x27;ve included a terms and concepts dictionary at the bottom of this page which explains technical concepts in general outside of the specific context in which they are mentioned. If you&#x27;re new to NVIDIA or GPU hardware and programming I&#x27;d recommend reading a bit about the basics of NVIDIA/GPU hardware and CUDA first. Below is some literature I recommend:</p>
+<p>If you see something in here that is technically inaccurate shoot me an email; always happy to have technical conversations and continue sharpening my understanding.</p>
+<h2 id="competition-background">Competition Background</h2>
+<p>In order to better understand hardware accelerators for machine learning (in particular NVIDIA hardware/software including CUDA, PTX, SASS, and wrapper languages/libraries like CUTE/CUTLASS/CuBLAS, CuteDSL, Triton, etc...) I decided to learn by participating in a kernel engineering competition hosted by the ML Systems community GPU Mode in partnership with NVIDIA. The competition consisted of 4 phases, each phase proposing a new problem to solve over the course of a few weeks. Each problem involved designing a broadly functional kernel that could be hyper-specialized for the given benchmarks. The main theme of the problems was the new NVIDIA NVFP4 data type introduced in the Blackwell architecture.</p>
+<h2 id="nvfp4-background">NVFP4 Background</h2>
+<p>NVFP4, which stands for NVIDIA Floating Point 4-bit, refers to a new low-bit data type supported by the NVIDIA Blackwell architecture. As the name suggests this is a 4 bit floating point type with the following structure:</p>
+<p>1b - Sign<br>2b - Exponent<br>1b - Mantissa</p>
+<p>4 bits can only support 16 distinct values, so replacing a model using 16 or 32 bit precision with 4 bit precision would very likely result in significant loss in model accuracy. To address this the NVFP4 data type uses a technique called block-scaling (used in other low-bit data types as well). Block-scaling combines blocks of low-bit values with a single higher precision scalar value. In the case of NVFP4 there are two tiers of block-scaling: the first tier pairs every 16 4b NVFP4 values with a single 8b E4M3 floating point type (E4M3 refers to 4b exponent, 3b mantissa). The second tier of scaling scales full tensors by a 32b float.</p>
+<p>The primary differentiators NVFP4 introduces as improvements to efficiency and accuracy of model quantization are 3 fold. First, using 16 elements per block instead of a larger number like 32 results in a more fine-grained representation of the higher precision numbers. Second, the E4M3 data type results in more accurate scaling as compared to the E8M0 (i.e. only scaling by powers of 2) data type. Lastly, Blackwell based hardware includes hardware accelerators for NVFP4 block-scaled operations (explained further in the GEMM section). Checkout NVIDIAs explanation of NVFP4 and it&#x27;s benefits over other low-bit data types when it comes to model training and inference <sup class="refnum">[1]</sup>.</p>
+<p>Useful Links: <sup class="refnum">[1]</sup> <a href="https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/" target="_blank" rel="noopener noreferrer">https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/</a> (Explains NVFP4)</p>
+        </article>
+        <nav class="pager">
+            
+            <a class="pgnext" href="/projects/nvfp4/nvfp4_batched_gemv.html">Batched GEMV →</a>
+        </nav>
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span></p>
+        </div>
+    </main>
+</body>
+</html>

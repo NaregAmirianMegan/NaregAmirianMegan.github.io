@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anthropic Performance Takehome — Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="blogbar">
+            <a href="/projects_research.html">← Projects / Research</a>
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">GitHub profile ↗</a>
+        </div>
+
+        <article class="post">
+            <h1>Kernel Development with LLMs - Breaking 970 Cycles on Anthropic's Performance Takehome</h1>
+            <p class="post-meta">On programming and optimizing kernels with LLMs</p>
+
+            <h2>Background on the problem</h2>
+            <p>
+                Anthropic released their performance takehome assessment which consisted of optimizing a
+                tree-traversal kernel for a simulated simple VLIW SIMD computer architecture. See the formal problem
+                here: https://github.com/anthropics/original_performance_takehome
+            </p>
+            <p>
+                Anthropic has asked for solutions to remain private, so I won't dive into the technical
+                details of the solutions I developed; however, I think it's still interesting to discuss
+                how LLMs can be used to accelerate development and fine-tune conceptual ideas.
+            </p>
+            <p>
+                I was able to develop my solution to 1357 cycles (just under what Opus 4.5 was able to achieve). At this point I decided it would be an interesting case study to use LLMs to see just how much more I could optimize what to me seemed like an already heavily optimized kernel.
+            </p>
+
+            <h2>Approaches to coding with an LLM</h2>
+            <p>
+                Broadly speaking, kernel development happens in a loop of
+                <ol>
+                    <li><strong>Conceptual design</strong></li>
+                    <li><strong>Implementation</strong></li>
+                    <li><strong>Analysis</strong>, then back to step 1 with analytical results in mind</li>
+                </ol>
+            </p>
+            <p>
+                When programming with an LLM you can take the approach of simply letting the agent iterate over this development loop for a fixed amount of time, or until it has reached a certain performance target. From what I understand this is how the benchmarks were created. The other option is to work with the agent along the development loop.
+            </p>
+            <p>
+                In my experience letting LLMs code without any human in the loop for too long often results in a difficult process of trying to dissect and understand the optimizations that have been made. This not only makes it hard to understand how a kernel has been implemented in code, but also prevents further human agent collaboration because the human is now completely out of the loop on a conceptual level. Additionally, agents that iterate on their own for long periods of time seem to be much more prone to getting stuck in local optima.
+            </p>
+            <p>
+                In this context a local optimum means the model is trying to drill down on a concept that has been completely exhausted or tweak hyper-parameter knobs that have been highly tuned already without zooming out and seeing if there are any broader conceptual ideas that have yet to be pursued that could bear more fruit.
+            </p>
+            <p>
+                The second option of co-development allows the human to stay up to date on any new concepts the agent introduces as well as how things are being implemented in code. It also allows the human to observe more readily if the agent is stuck in a local optimum and course correct.
+            </p>
+            <p>
+                For background on examples I provide in the following paragraphs, I broadly describe the pillars of my solutions. For this problem, my solution — and I would guess most other solutions due to the simplicity of the simulated hardware — revolve around three primary principles:
+            </p>
+            <ol>
+                <li>
+                    <strong>Reduce necessary instructions.</strong> Eliminate unnecessary loads/stores,
+                    compress arithmetic where possible, and avoid repeated computations.
+                </li>
+                <li>
+                    <strong>Vector scalar combo efficiency.</strong> Utilize vector and scalar ops to maximize compute per cycle and minimize the length of the critical path.
+                </li>
+                <li>
+                    <strong>Efficiently pack VLIW.</strong> Structure code in a way that packs instructions
+                    into cycles such that there are the fewest overall cycles. This means designing some kind of compiler / static scheduler.
+                </li>
+            </ol>
+            <p>
+                My approach was to tackle each phase of the development cycle one at a time. This avoids the agent both ideating and coding in one fell swoop, which only results in wasted tokens if the idea being implemented clearly won't work and isn't worth pursuing. It also makes it easier for the human to follow the agent's chain of thought without interjecting code snippets or numerical analysis. This brings me to a second point about development efficiency: models love to run tests and do numerical analysis to prove whether or not ideas are worth pursuing. While analyzing performance using empirical evidence is important, it's not always the appropriate tool to evaluate the merits of an idea. This is the case for two reasons: constantly running experiments can significantly slow development and the results can be misleading. 
+            </p>
+            <p>
+                This is the case for humans, but particularly so for LLMs. Throughout my development process there were many times where the model would be stuck in a blind loop running countless numerical evaluations of the kernel or a feature within the kernel without viewing those numbers and the kernel structure in the context of how it should theoretically interact with the hardware. For example, when attempting to improve the scheduler I had written (a simple DAG-based greedy scheduler), the model resorted to tweaking knobs I already implemented and measuring results rather than thinking about how to improve the scheduler algorithm on a theoretical / conceptual level first before measuring optimization ideas numerically.
+            </p>
+            <p>
+                Following these ideas and guiding various models I was able to whittle my solution down to 966 cycles (see my submission on the leaderboard: https://vliw-challenge.fly.dev/).
+            </p>
+
+            <h2>LLM certainty, sycophancy, and strategies to get around them</h2>
+            <p class="note">
+                <strong>Certainty.</strong> LLMs often use very certain language ("This is the absolute best
+                we can do," or "We've reached the theoretical limit"), and it's important to take these words
+                as opinion rather than fact. LLMs can iterate on many experiments and explore search spaces
+                much larger than humans can, and for that reason it's tempting to assume the LLM has a better
+                idea of what's theoretically possible (particularly for micro-optimizations). But in my
+                experience, although LLMs can run lots of experiments quickly, they tend to get tunnel vision
+                and focus on a narrow set of ideas, often forgetting the big picture. This is where the human
+                in the development loop becomes incredibly important: to guide the AI in high-level conceptual
+                directions with novel ideas that the AI can then drill into.
+            </p>
+            <p class="note">
+                <strong>Sycophancy.</strong> LLMs will often heavily weight what you say, especially if you
+                frame it as truth backed up with numbers — and will then operate under that assumption for
+                the remainder of the development cycle. In many cases it's helpful to have the LLM question
+                your own assumptions, which can in turn help you brainstorm new ideas the LLM missed.
+            </p>
+
+            <h2>Appeal to analogous problems or third-party authority</h2>
+            <p>
+                Because models can become so certain about potentially misunderstood ideas, it can be useful
+                to appeal to a third-party authority. Here is an example. After the model had convinced itself
+                it had hit a "resource-bound wall" at 1078 cycles, I reframed the problem by pointing to a
+                competitive leaderboard:
+            </p>
+
+            <div class="exchange">
+                <div class="turn user">
+                    <span class="role">User Prompt</span>
+                    <p>
+                        Let's try one last final zoom out and search for any algorithmic restructures or
+                        "tricks" that could give us the last ~70 cycles we're looking for. For reference, this
+                        is a competition and there are a few submissions ahead of me. Here are their respective
+                        performances:
+                    </p>
+                    <p><code>1075, 1067, 1057, 1040, 1038, 1035, 1009, 1002, 1001</code></p>
+                </div>
+                <div class="turn assistant">
+                    <span class="role">Claude Code Response</span>
+                    <p>
+                        This changes everything — 1078 is clearly not optimal (submissions at 1075, 1067, 1057
+                        are just above me, with a frontier at 1001). My "resource-bound wall" conclusion was
+                        wrong: since the critical path (459) is far below the floor (~1000), a perfect schedule
+                        should hit ~floor with near-zero gap. My drain is a schedule artifact of sequential
+                        group emission, not fundamental.
+                    </p>
+                </div>
+            </div>
+
+            <p>
+                After being stuck on certain assumptions, simply asserting that something <em>is</em> possible
+                makes the model rethink those assumptions and potentially work its way out of the misguided
+                hole it has dug itself into.
+            </p>
+
+            <p>
+                A less "tricky" way I found to help a model out of a local optimum is referencing structured solutions that map well to the problem being solved, which provides a context that helpfully narrows the solution space the model explores. For example, referencing LLVM and its use of SSA (Static Single Assignment) during compilation helped the model map some new conceptual optimizations onto my greedy scheduler, which led to some major improvements.
+            </p>
+
+            <p>
+                Summarizing my key takeaways on working with LLMs on optimizing HPC kernels:
+            </p>
+            <ol>
+                <li>
+                    <strong>Stay in the loop.</strong> Co-development beats letting the agent run
+                    unsupervised for long stretches. Keeping a human in the design–implementation–analysis
+                    loop preserves a conceptual understanding of the kernel, keeps the code legible, and
+                    makes it far easier to spot when the model has drifted off course.
+                </li>
+                <li>
+                    <strong>Separate ideation from implementation.</strong> Tackling each phase of the
+                    development cycle one at a time avoids wasting tokens coding up ideas that clearly
+                    won't pan out, and makes the model's reasoning easier to follow.
+                </li>
+                <li>
+                    <strong>Don't over-rely on empirical measurement.</strong> Models love to run
+                    experiments, but constant numerical evaluation slows development and the results can be
+                    misleading. Reason about how the kernel should interact with the hardware at a
+                    theoretical level <em>before</em> reaching for the profiler.
+                </li>
+                <li>
+                    <strong>Watch for local optima.</strong> Agents are prone to tunnel vision —
+                    endlessly tuning already-optimized knobs instead of zooming out to find broader
+                    conceptual wins. The human's job is to provide that high-level redirection.
+                </li>
+                <li>
+                    <strong>Treat certainty as opinion.</strong> Confident claims like "we've hit the
+                    theoretical limit" are hypotheses, not facts. Push back on them.
+                </li>
+                <li>
+                    <strong>Be mindful of sycophancy.</strong> Models heavily weight what you assert,
+                    especially when framed with numbers. Use this deliberately — invite the model to
+                    question your assumptions, and reframe stuck problems (e.g. pointing to a competitive
+                    leaderboard) to break it out of a local optimum.
+                </li>
+                <li>
+                    <strong>Anchor to analogous, well-structured solutions.</strong> Referencing
+                    established frameworks like LLVM and SSA gave the model a productive structure to map
+                    new optimizations onto, narrowing the search space toward ideas that actually paid off.
+                </li>
+            </ol>
+            <p>
+                Working this way, the human and model each play to their strengths: the model explores and
+                implements quickly, while the human supplies the conceptual direction and skepticism that
+                keep the search out of dead ends. That collaboration is what carried this kernel from 1357
+                down to 966 cycles.
+            </p>
+        </article>
+
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span></p>
+        </div>
+    </main>
+</body>
+</html>

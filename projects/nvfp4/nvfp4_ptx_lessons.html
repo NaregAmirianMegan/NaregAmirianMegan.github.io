@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTX &amp; HW Lessons — Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="blogbar">
+            <a href="/projects/nvfp4/nvfp4_blog.html">← NVFP4 Kernels</a>
+            <a href="https://github.com/NaregAmirianMegan/NVFP4_Kernels" target="_blank" rel="noopener noreferrer">View source on GitHub ↗</a>
+        </div>
+        <article class="post">
+            <h1>PTX &amp; HW Lessons</h1>
+            <p class="post-meta">NVFP4 Kernel Series · Section 7 of 7</p>
+<p>This file collects the most crucial lessons learned about PTX, CUDA, and NVIDIA Blackwell hardware that aren&#x27;t well outlined in the NVIDIA / PTX documentation. They are extracted from the kernels and writeups in 01_batched_gemv.txt - 06_kernel_dev_optimizations.txt and are roughly grouped by topic.</p>
+<p>Each item below starts with the lesson itself, then notes where in the blog it was hit, and what to look out for if you encounter the same area.</p>
+<h3 id="1-the-core-matrix-concept-is-essential-but-undocumented">1. The &quot;core matrix&quot; concept is essential but undocumented</h3>
+<p>What: tcgen05.mma reads its A/B tiles from SMEM through a &quot;matrix descriptor&quot; whose LBO (Leading Byte Offset) and SBO (Stride Byte Offset) fields only make sense if you know that the underlying SMEM tile is laid out as a 2D grid of fixed-size building blocks called &quot;core matrices&quot;. For the no-swizzle case a core matrix is 8 rows x 16 bytes; under swizzling, N changes to the swizzle width. K-major tiles are stored as columns of core matrices contiguous in SMEM, then the next column, and so on.</p>
+<p>Where: 02_gemm.txt (Data formatting section, around the &quot;core matrix&quot; discussion).</p>
+<p>The gap: The phrase &quot;core matrix&quot; does not appear as a first-class concept anywhere in the official PTX documentation that I could find. The closest references are Table 38 (asynchronous-warpgroup-level swizzle/lead-dim) and the tcgen05 canonical layouts table, both of which describe the same idea but bury it under a CuTe-style layout notation that is hard to back-translate. The Modular blog series on Blackwell matmul was the primary external resource that explained this clearly.</p>
+<p>What to look out for: LLMs will hallucinate confident-sounding but wrong definitions for &quot;core matrix&quot; (verified in the development of these kernels). Don&#x27;t trust an AI-generated explanation of LBO/SBO without cross-checking it against a working kernel. The descriptor encoding is unforgiving and a wrong LBO/SBO produces garbage outputs that look like a transposed or shuffled answer, not an obvious crash.</p>
+<h3 id="2-scale-factor-tmem-layout-repeats-data-4x-across-columns">2. Scale-factor TMEM layout repeats data 4x across columns</h3>
+<p>What: The block-scaling tcgen05.mma expects per-row scale factors in TMEM laid out as a &quot;32 x 4 x 4&quot; CuTe-style layout: 32 lanes (M/N broken into chunks of 32), 4 cols of payload, and then 4x replication of that payload along the column axis. The replication is required by the hardware — the <code>.warpx4</code> multicast modifier on tcgen05.cp is what produces it.</p>
+<p>Where: 02_gemm.txt (TMEM SF layout section, just before the link to PTX Figure 233).</p>
+<p>The gap: The PTX docs show the diagram (Figure 233) but do not state in prose that the column-axis replication is a hardware requirement. It is easy to interpret the figure as showing one possible layout among many rather than the one required form. The <code>.warpx4</code> multicast modifier on tcgen05.cp is presented as one of several options on the cp instruction, but for our SF copy size and shape it is the only valid one — that constraint is implicit.</p>
+<p>What to look out for: If you change the MMA shape and the SF tile dimensions stop dividing evenly into 32-lane chunks, you need to revisit both the TMA SF transfer and the tcgen05.cp .shape/.multicast modifier. The legality table for <code>.multicast</code> is at <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp</a> but the constraints linking it to .shape are buried.</p>
+<h3 id="3-tmem-is-accessed-in-32-lane-bands-m-128-needs-4-warps">3. TMEM is accessed in 32-lane bands; M=128 needs 4 warps</h3>
+<p>What: TMEM is structured as 128 lanes x 512 columns of 32-bit cells, but a single warp can only address a contiguous 32-lane band via tcgen05.ld. To read a full M=128 output tile (Layout D), you need exactly four warps cooperating, one per band.</p>
+<p>Where: 02_gemm.txt (Layout D section, and 04_group_gemm.txt&#x27;s epilogue structure).</p>
+<p>The gap: The PTX docs list the tcgen05.ld shape options (.16x256b, .16x128b, etc.) and the figures show per-thread fragment mappings, but there is no single paragraph that states the warp-to-lane mapping rule. You infer it from the load shape diagrams. The reason for the constraint (likely a physical wiring decision) is not given.</p>
+<p>What to look out for: Your kernel will compile and run with the &quot;wrong&quot; number of epilogue warps — you simply won&#x27;t access all the rows you think you&#x27;re accessing, and the result will look like a sliced/missing-row output. Always pair your TMEM M dimension to a multiple of 32 epilogue warps.</p>
+<h3 id="4-memory-proxies-smem-stores-and-tma-reads-need-an-explicit-">4. Memory proxies: SMEM stores and TMA reads need an explicit fence</h3>
+<p>What: Ordinary SMEM stores from a thread go through the &quot;generic&quot; proxy. TMA loads (cp.async.bulk.tensor) read SMEM through the &quot;async&quot; proxy. A write through one proxy is not automatically visible to a read through the other. You need a <code>fence.proxy.async.shared::cta</code> (or analogous fence depending on the direction) between an epilogue&#x27;s SMEM writes and a subsequent TMA store of that same SMEM region.</p>
+<p>Where: 04_group_gemm.txt V15. This bug took a long time to track down because the symptoms are non-deterministic correctness errors that survive many reproduction attempts.</p>
+<p>The gap: The PTX docs cover memory proxies (<a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#memory-consistency-model" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#memory-consistency-model</a>) but do not put a &quot;danger sign&quot; next to the specific SMEM-store-then-TMA-store pattern. At the source level it looks like a within-SMEM RAW hazard that the hardware should handle — the fact that the two operations go through different proxies and need an explicit fence is not obvious.</p>
+<p>What to look out for: Any time you have one set of warps writing into an SMEM buffer using ordinary stores while another agent (TMA engine, tcgen05.cp, etc.) is going to read or write that buffer, walk through the proxies for both sides. If they differ, insert the appropriate <code>fence.proxy.{kind}.{scope}</code>. Other proxy pairs to watch for: tensormap proxy (tensormap.cp_fenceproxy when patching descriptors), async-vs-generic on the CLC <code>clc_result</code> buffer (V8).</p>
+<h3 id="5-tensormap-cp-fenceproxy-is-a-heavy-serializer-at-gpu-scope">5. tensormap.cp_fenceproxy is a heavy serializer at GPU scope</h3>
+<p>What: <code>tensormap.cp_fenceproxy.global.shared::cta.tensormap::generic.release.gpu</code> is functionally a small GMEM round-trip plus a fence at L2/GPU scope. Issuing more than one per tile in the steady state is enough to wreck a kernel&#x27;s performance. The instruction is necessary to make a patched tensor map visible to a subsequent TMA in another CTA, but its cost is much higher than typical PTX instructions.</p>
+<p>Where: 04_group_gemm.txt V6 (introducing tensormap.replace), V10 (deferring C tmap patch to overlap fence cost), failed experiment sub_v6_2_descoverlap (showed +20us regression from 3 fenceproxies per tile vs 3 per group transition).</p>
+<p>The gap: The PTX docs describe the semantics of <code>tensormap.cp_fenceproxy</code> but do not characterize its cost. There is no perf table; you discover it empirically and only by comparing per-tile vs per-group-transition variants.</p>
+<p>What to look out for: Treat tensormap.cp_fenceproxy as you would a heavyweight global barrier. If you&#x27;re patching tensor maps on the hot path, see if you can move the fence to a cooler path (V10) or eliminate the patching entirely by pre-encoding per-group tmaps on the host and shipping them via a __grid_constant__ argument (V17/V21).</p>
+<h3 id="6-multicast-tma-changes-mbarrier-arrival-count-requirements">6. Multicast TMA changes mbarrier arrival-count requirements</h3>
+<p>What: When <code>.multicast::cluster</code> is added to a <code>cp.async.bulk.tensor</code>, the instruction takes an extra <code>ctaMask</code> operand and delivers the same data to multiple CTAs&#x27; SMEM at the same offset, arriving on each receiving CTA&#x27;s mbarrier. Every receiving CTA&#x27;s mbarrier must be initialized with arrival count = CLUSTER_SIZE (not 1), otherwise the consumer&#x27;s <code>mbar_wait</code> underflows and the kernel hangs forever. Similarly, the producer-side <code>mbarrier.arrive.expect_tx</code> helper must be scoped to <code>.shared::cluster</code> rather than <code>.shared::cta</code>, and <code>tcgen05.commit</code> must use <code>multicast::cluster</code> to release the shared barrier on every CTA in the cluster.</p>
+<p>Where: 04_group_gemm.txt V17 (success), failed experiment sub_v6_2_multicast (hang — multicast TMA added without the supporting arrival-count and commit-scope changes).</p>
+<p>The gap: The multicast TMA instruction&#x27;s docs do mention the .shared::cluster requirement on the destination, but the side-effects on mbarrier init counts and on the matching <code>tcgen05.commit</code> scope are not bundled into a single &quot;if you do A you must also do B and C&quot; page. You discover the requirements by walking the data flow and asking &quot;who arrives on this barrier?&quot;.</p>
+<p>What to look out for: Treat multicast TMA, .shared::cluster mbarriers, multicast tcgen05.commit, and arrival-count-of-N as a single change-set. Adding any one without the others either hangs (consumer under-counts arrivals) or races (consumer over-counts and proceeds before producers finish).</p>
+<h3 id="7-heisenbugs-from-missing-synchronization-not-from-hardware">7. Heisenbugs from missing synchronization, not from hardware</h3>
+<p>What: tcgen05/TMA-heavy kernels can produce non-deterministic correctness errors when synchronization is wrong — the kernel sometimes returns correct results, sometimes doesn&#x27;t, and the failure depends on timing. This is almost always a missing or incorrectly scoped mbarrier, fence, or named-barrier, not a hardware bug.</p>
+<p>Where: 02_gemm.txt (the &quot;Heisenbug&quot; paragraph in the design overview), 04_group_gemm.txt&#x27;s failed experiments (sub_v8.py wrong arrive count, v5_iter_static.py arrive-count mismatch, etc.).</p>
+<p>The gap: The PTX docs spell out the synchronization primitives but do not give a worked-out methodology for &quot;given this dataflow graph, what mbarriers/fences/waits do you need&quot;. Discovering the rules feels like systems-programming intuition transferred to GPUs.</p>
+<p>What to look out for: When you change the number of producers, consumers, or pipeline stages, re-derive every related sync count and phase. The most common bug pattern is &quot;I added another consumer warp but forgot to bump the arrival count on the producer-side mbarrier&quot; — and it manifests as a race that may pass tests for thousands of runs and then fail under benchmark load.</p>
+<h3 id="8-mbarrier-phase-bits-are-binary-deeper-rings-need-more-book">8. mbarrier phase bits are binary; deeper rings need more bookkeeping</h3>
+<p>What: An mbarrier&#x27;s phase is a single bit that flips on completion. A 2-buffer ping-pong tracks state cleanly because each buffer has its own bit. A 3-buffer rotation (V22 group GEMM TMEM) requires a 3-state external tracker — using just the single phase bit per barrier produces phase mismatches and hangs. A 4-deep TMEM ring without a higher-order phase tracker is fragile for the same reason (failed sub_v6_tmem_circ.py).</p>
+<p>Where: 04_group_gemm.txt V13 (TMEM 2-buffer ping-pong) -&gt; V22 (3-buffer rotation, requires <code>epi_phase[3]</code>, <code>epi_done_phase[3]</code> arrays), failed sub_v6_tmem_circ.</p>
+<p>The gap: The PTX docs explain mbarrier semantics but do not flag the implication that ring buffers deeper than 2 stages need external phase tracking. You can think you have a working N-deep pipeline when in fact stage 0 and stage N-2 are using the same phase bit and toggling in a way the consumer disagrees with.</p>
+<p>What to look out for: For 2-deep ping-pong, mbarrier phase is sufficient. For N &gt;= 3, allocate a per-stage int phase array and track each stage&#x27;s phase independently — the mbarrier still flips, but you need to know which &quot;round&quot; you&#x27;re in.</p>
+<h3 id="9-tcgen05-ordering-rules-not-all-pairs-need-explicit-fences">9. tcgen05 ordering rules: not all pairs need explicit fences</h3>
+<p>What: Within program order on a single thread, tcgen05.cp (SMEM-&gt;TMEM copies) are guaranteed to complete before subsequent tcgen05.mma operations. This is a hardware-level pipeline rule and means you do NOT need an explicit fence between them in the MMA warp&#x27;s k-loop. However, tcgen05.mma -&gt; tcgen05.ld in the epilogue DOES need a tcgen05.fence::after_thread_sync because async tcgen05 ops can otherwise be reordered or executed out of program order.</p>
+<p>Where: 02_gemm.txt (Synchronization section between MMA warp and Epilogue warp).</p>
+<p>The gap: The pipelining-rules section of the PTX docs lists the guaranteed orderings but it is dense and easy to miss the specific cp-&gt;mma case. As a defensive coder you might add an unnecessary fence, which works but costs latency.</p>
+<p>What to look out for: When designing a sync scheme, check the official tcgen05 pipelining rules table for the exact pair of instructions you&#x27;re trying to order. There&#x27;s often a free guarantee.</p>
+<h3 id="10-collector-usage-on-tcgen05-mma-can-give-silent-speedups">10. collector_usage on tcgen05.mma can give silent speedups</h3>
+<p>What: tcgen05.mma&#x27;s <code>collector_usage</code> field (.collector::a::fill, ::use, ::lastuse, ::discard) controls whether the A or B operand stays resident in the MMA hardware&#x27;s on-chip collector buffer between consecutive MMAs. The default is <code>::discard</code>. If two back-to-back MMAs share an operand (e.g. dual GEMM where both MMAs share A), marking the first ::fill and the second ::lastuse avoids re-loading A from SMEM.</p>
+<p>Where: 03_dual_gemm.txt V2-collector (added late after seeing competition winners use it). The speedup was real but not uniform — small-M shapes benefited and large-M shapes did not, for reasons that remain an [Open Problem].</p>
+<p>The gap: The collector_usage field is documented as a list of legal modifier values with one-line descriptions. There is no architectural discussion of when the collector buffer&#x27;s contents are actually preserved across MMAs — it is a &quot;strong hint&quot; and the hardware ultimately decides. The performance impact and the shape-dependence are not characterized.</p>
+<p>What to look out for: If you&#x27;re issuing multiple MMAs that share an operand, try ::fill / ::use or ::lastuse and measure. The instruction will be correct either way; only performance changes. The win depends on problem shape in ways that are not easy to predict from the docs.</p>
+<h3 id="11-nsight-compute-defaults-can-mislead-on-tcgen05-warp-speci">11. Nsight Compute defaults can mislead on tcgen05/warp-specialized kernels</h3>
+<p>What: NCU&#x27;s &quot;traditional&quot; stall, occupancy, and active-warps counters can paint a misleading picture for warp-specialized tcgen05 kernels: priming stalls dominate small-problem-size runtimes, async-instruction-then-wait patterns mark warps as idle while they&#x27;re actually orchestrating asynchronous work, and SMEM-heavy CTA designs depress occupancy below what the asynchronous units are actually achieving. Additionally, the &quot;Source&quot; view buckets most counters into the single asm volatile block that issues tcgen05 instructions.</p>
+<p>Where: 06_kernel_dev_optimizations.txt (the Nsight Compute discussion), 05_glossary.txt&#x27;s NCU subsection.</p>
+<p>The gap: This is a tooling issue, not strictly a PTX-docs issue, but it shows up in the same place. NCU has not yet caught up to the change in programming paradigm introduced by tcgen05 / TMA / warp specialization.</p>
+<p>What to look out for: Build your own timing harness with CUDA events (group GEMM V3 example), and use NCU&#x27;s mbarrier stall counters as a proxy for which section of a warp-specialized kernel is the bottleneck.</p>
+<h3 id="12-ptx-type-conversion-instructions-exist-that-intrinsics-do">12. PTX type-conversion instructions exist that intrinsics don&#x27;t expose</h3>
+<p>What: PTX provides cvt.rn.f16x2.e2m1x2 (FP4 -&gt; FP16 pair) and cvt.rn.f16x2.e4m3x2 (FP8 -&gt; FP16 pair) instructions that perform low-bit -&gt; FP16 conversions in a single PTX op. The CUDA intrinsics for the same conversion (__nv_cvt_fp4x2_to_halfraw2, __nv_cvt_fp8_to_halfraw) compile down to long sequences of LOP3/PRMT/IMAD arithmetic instructions instead. On the GEMV final kernel, replacing the intrinsics with the direct PTX cvt produced a 30-50% latency improvement.</p>
+<p>Where: 01_batched_gemv.txt Final Kernel (the major insight that resolved the V6_2_4 &quot;80% of the kernel is arithmetic instructions&quot; puzzle).</p>
+<p>The gap: The CUDA intrinsic header documentation doesn&#x27;t mention that the intrinsic is many-instructions while a single PTX op exists for the same operation. You only discover this by inspecting the SASS or the NCU instruction breakdown.</p>
+<p>What to look out for: For low-bit float conversions in a hot loop, write the PTX directly. Same lesson likely applies for fma.rn.f16x2 / mul.rn.f16x2 / add.rn.f16x2 in cases where the compiler isn&#x27;t already using them.</p>
+<h3 id="13-cta-group-2-2sm-compatibility-with-other-features-is-opaq">13. CTA_GROUP=2 (2SM) compatibility with other features is opaque</h3>
+<p>What: tcgen05.mma supports cta_group::2 (also called &quot;2SM&quot; or CTA pairs) which has two cooperating CTAs in a cluster share a single MMA&#x27;s data — each contributing half of the A or B operand. This works well in isolation, but combining it with other features (cluster-local split-K via DSMEM, multicast, certain MMA shapes) sometimes fails in ways that suggest the combination isn&#x27;t supported, but the docs don&#x27;t say either way.</p>
+<p>Where: 03_dual_gemm.txt V5 (DSMEM-resident split-K attempted on top of 2SM, did not work), 04_group_gemm.txt sub_v8.py (2-CTA cluster with 2SM MMA on top of tensormap.replace, failed correctness — but with multiple other bugs in the same change).</p>
+<p>The gap: The PTX docs list the legal values for cta_group on each instruction but do not provide a compatibility matrix for &quot;feature A x feature B&quot; combinations. You discover incompatibilities by trial.</p>
+<p>What to look out for: When stacking multiple advanced features (2SM + multicast + DSMEM + split-K), introduce them one at a time and verify each lands correctly. Combination bugs are otherwise indistinguishable from individual-feature bugs.</p>
+<h3 id="14-the-4-warp-epilogue-s-requirement-isn-t-really-a-design-c">14. The 4-warp epilogue&#x27;s requirement isn&#x27;t really a &quot;design choice&quot;</h3>
+<p>What: Many tcgen05 result layouts force exactly 4 warps to participate in the epilogue (1 warp per 32 lanes for M=128). This is not a design choice the programmer makes — it&#x27;s a hardware constraint that propagates back to the kernel&#x27;s warp count and warp-specialization design.</p>
+<p>Where: 02_gemm.txt (Layout D explanation), 03_dual_gemm.txt and 04_group_gemm.txt (which all keep the 4-epilogue-warp pattern).</p>
+<p>The gap: The hardware reason for the 32-lane access granularity isn&#x27;t given. It&#x27;s a &quot;this is just how it is&quot; that constrains your kernel architecture.</p>
+<p>What to look out for: When sizing total warps in a warp-specialized kernel, start from &quot;I need 4 epilogue warps&quot; and work backward to TMA/MMA/tile-descriptor warp counts. Going the other direction will eventually corner you.</p>
+<h3 id="general-notes-on-using-the-ptx-docs-effectively">General notes on using the PTX docs effectively</h3>
+<pre class="diagram">  * The PTX docs are organized as a reference (here&#x27;s what every instruction does, here are its modifiers) rather than as a guide (here&#x27;s how to build a kernel of type X). For kernel design they are necessary but not sufficient — pair them with the Modular blog series, the CUTLASS source, and reading kernels other people have published.
+
+  * Cross-reference any single instruction page with the relevant &quot;pipelining rules&quot; section and the relevant &quot;asynchronous operations&quot; overview. The constraints on the instruction often live two pages away.
+
+  * If an LLM is confidently explaining a tcgen05 / TMA / memory-proxy concept, verify against the docs. The areas where the docs are thin are exactly the areas where LLMs have the least training signal and are most likely to confabulate.
+
+  * Keep an &quot;[Open Problem]&quot; list. Many of the items in this file started as Open Problems before becoming concrete lessons. The docs may eventually catch up; until they do, your own notes are the best reference.</pre>
+        </article>
+        <nav class="pager">
+            <a class="pgprev" href="/projects/nvfp4/nvfp4_kernel_dev.html">← Kernel Dev Notes</a>
+            
+        </nav>
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span></p>
+        </div>
+    </main>
+</body>
+</html>

@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMM — Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="blogbar">
+            <a href="/projects/nvfp4/nvfp4_blog.html">← NVFP4 Kernels</a>
+            <a href="https://github.com/NaregAmirianMegan/NVFP4_Kernels" target="_blank" rel="noopener noreferrer">View source on GitHub ↗</a>
+        </div>
+        <article class="post">
+            <h1>GEMM</h1>
+            <p class="post-meta">NVFP4 Kernel Series · Section 2 of 7</p>
+<p>In this section I cover the basics of using tcgen05 instructions to accelerate matrix multiplication on the NVIDIA Blackwell architecture. I won&#x27;t be covering iterative improvements as I couldn&#x27;t compete in this segment of the competition. However, further GEMM optimizations applicable to basic GEMM and more will be explored in the following two kernels, which are both GEMM variants.</p>
+<h3 id="gemm-operation">GEMM Operation</h3>
+<p>GEMM (GEneral Matrix Multiply) performs the operation D &lt;- a * A @ B + b * C, argument details:</p>
+<p>D := Resultant MxN matrix a := Scalar value A := Input matrix MxK B := Input matrix KxN b := Scalar value C := Input MxN matrix</p>
+<p>C and D can refer to the same matrix. The particular variant of matrix multiply we deal with in the following kernels is the simplified operation C &lt;- A @ B, so there are no scalar values involved, and there is no summation onto an existing matrix.</p>
+<h3 id="pre-tensor-core-gemm">Pre-Tensor Core GEMM</h3>
+<p>Prior to the inclusion of tensor cores on the Volta architecture, CUDA cores were used to perform matrix multiplication. Many of the broader optimization principles used in the pre-tensor core algorithms are similar to those used in the post-tensor core algorithms, but there are also many aspects that are distinct as a result of the paradigm introduced by the use of tensor cores.</p>
+<p>This blog provides great insight into writing optimal GEMM kernels without tensor cores: <a href="https://siboehm.com/articles/22/CUDA-MMM" target="_blank" rel="noopener noreferrer">https://siboehm.com/articles/22/CUDA-MMM</a></p>
+<p>Principles that will carry through to the tensor core versions:</p>
+<h3 class="topic" id="fully-utilizing-memory-bandwidth">Fully utilizing memory bandwidth</h3>
+<h3 class="topic" id="maximizing-temporal-and-spatial-locality-thereby-increasing-">Maximizing temporal and spatial locality (thereby increasing arithmetic intensity)</h3>
+<h3 id="tensor-cores">Tensor Cores</h3>
+<p>From a software perspective the primary function of tensor cores is to multiply two MxK and KxN chunks of matrices and store/accumulate that result into an MxN buffer. For a more detailed description of the evolution of tensor cores see this article by Modular <sup class="refnum">[1]</sup>. Tensor cores can source the input data from SMEM or TMEM (Tensor Memory), depending on the input. Tensor Memory is a 256KB storage bank per SM dedicated to tensor core operations <sup class="refnum">[2]</sup>. The details of how tensor core operations are managed and interact with threads and warps has changed over the various NVIDIA architectures since Volta; we will be discussing the Blackwell architecture.</p>
+<h3 id="blackwell-tensor-cores-tcgen05-and-gemm">Blackwell Tensor Cores (tcgen05) and GEMM</h3>
+<p>Central to our kernel is the tcgen05 mma instruction. In particular the block-scaled floating point version using nvfp4 values with e4m3 scalars. There are two variants we can use, the only difference between the two is where the A-block is stored (TMEM or SMEM). For this implementation we choose the SMEM variant:</p>
+<pre class="code"><code>tcgen05.mma.cta_group.kind.block_scale{.scale_vectorsize}
+                                        [d-tmem],  a-desc,  b-desc, idesc,
+                                        [scale-A-tmem], [scale-B-tmem], enable-input-d;
+
+.kind = { .kind::mxf8f6f4, .kind::mxf4, .kind::mxf4nvf4 }
+.cta_group      = { .cta_group::1,   .cta_group::2 }
+.scale_vectorsize = { .scale_vec::1X, .scale_vec::2X, .scale_vec::4X, .block16, .block32 }</code></pre>
+<p>PTX Docs: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-mma-instructions" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-mma-instructions</a></p>
+<p>This instruction, issued by a single thread in a CTA, takes in four essential data arguments:</p>
+<h3 class="topic" id="mxk-nvfp4-data-block-in-smem-call-this-a">MxK nvfp4 data block in SMEM (call this A)</h3>
+<h3 class="topic" id="mx-k-16-e4m3-scale-factor-block-in-tmem-16-comes-from-16-adj">Mx(K // 16) e4m3 scale factor block in TMEM, 16 comes from 16 adjacent elements being scaled by one scale factor (call this SFA)</h3>
+<h3 class="topic" id="kxn-nvfp4-data-block-in-smem-call-this-b">KxN nvfp4 data block in SMEM (call this B)</h3>
+<h3 class="topic" id="k-16-xn-e4m3-scale-factor-block-in-tmem-call-this-sfb">(K // 16)xN e4m3 scale factor block in TMEM (call this SFB)</h3>
+<p>Then, all within the same instruction dispatch, the nvfp4 data blocks (A and B) are scaled into higher precision floats by the scale factor matrices (SFA and SFB), those resultant scaled matrices are then multiplied and stored or accumulated into a buffer in TMEM of size MxN.</p>
+<p>As can be seen from the instruction format of tcgen05.mma the inputs I list above don&#x27;t line up with the arguments to that instruction precisely. Before diving into how we provide the necessary inputs via the arguments of the tcgen05.mma instruction it helps to go over the broader MMA algorithm first.</p>
+<p>Let each mma instruction compute an mBxnB segment of C with a depth of kB (so each instruction computes the block-scaled matmul of an mBxkB segment of A with a kBxnB segment of B). The execution of a single one of these mma ops requires us to:</p>
+<h3 class="topic" id="load-mbxkb-block-of-a-and-kbxnb-block-of-b-into-smem">Load mBxkB block of A and kBxnB block of B into SMEM</h3>
+<h3 class="topic" id="load-mbx-kb-16-block-of-sfa-and-kb-16-xnb-block-of-sfb-into-">Load mBx(kB/16) block of SFA and (kB/16)xnB block of SFB into TMEM</h3>
+<h3 class="topic" id="execute-mma-and-accumulate-into-resultant-mbxnb-region-in-tm">Execute mma and accumulate into resultant mBxnB region in TMEM</h3>
+<p>For a single CTA this is the algorithm flow:</p>
+<p>Assume we have allocated SMEM with enough room for the following:</p>
+<h3 class="topic" id="a-block-mbxkb-of-nvfp4">A-block (mBxkB of nvfp4)</h3>
+<h3 class="topic" id="b-block-kbxnb-of-nvfp4">B-block (kBxnB of nvfp4)</h3>
+<h3 class="topic" id="sfa-block-mbx-kb-16-of-e4m3">SFA-block (mBx(kB/16) of e4m3)</h3>
+<h3 class="topic" id="sfb-block-kb-16-xnb-of-e4m3">SFB-block ((kB/16)xnB of e4m3)</h3>
+<h3 class="topic" id="allocate-tmem-need-room-for-sfa-block-sfb-block-c-block">Allocate TMEM (need room for SFA-block, SFB-block, C-block)</h3>
+<h3 class="topic" id="for-each-k-block-i-e-for-every-kb-sized-block-along-the-k-di">For each k-block (i.e. for every kB sized block along the k-dimension):</h3>
+<h3 class="topic" id="load-sfa-block-sfb-block-into-smem">Load SFA-block, SFB-block into SMEM</h3>
+<h3 class="topic" id="load-a-block-b-block-into-smem">Load A-block, B-block into SMEM</h3>
+<h3 class="topic" id="copy-sfa-block-sfb-block-into-tmem">Copy SFA-block, SFB-block into TMEM</h3>
+<h3 class="topic" id="execute-mma">Execute mma</h3>
+<h3 class="topic" id="move-c-block-into-cta-regs">Move C-block into CTA regs</h3>
+<h3 class="topic" id="move-c-block-from-cta-regs-to-gmem">Move C-block from CTA regs to GMEM</h3>
+<h3 class="topic" id="deallocate-tmem">Deallocate TMEM</h3>
+<p>There are many improvements that can be made to this algorithm that are discussed in detail later on, but this simple outline is enough to highlight the core PTX instructions necessary and the intricacies involved therein.</p>
+<p>Rewinding a few paragraphs I highlighted four primary inputs to the tcgen05.mma instruction: A, B, SFA, SFB. We specify this inputs as follows in the instruction itself:</p>
+<h3 class="topic" id="a-desc-specifies-a">a-desc specifies A</h3>
+<h3 class="topic" id="b-desc-specifies-b">b-desc specifies B</h3>
+<h3 class="topic" id="scale-a-tmem-specifies-sfa">scale-A-tmem specifies SFA</h3>
+<h3 class="topic" id="scale-b-tmem-specifies-sfb">scale-B-tmem specifies SFB</h3>
+<p>However, it isn&#x27;t as simple as just loading the data &quot;as is&quot; into SMEM/TMEM buffers and providing the instruction pointers to those buffers. The data has to be structured in particular formats according to how the instruction has been configured (this includes things like what we choose for the size of the data blocks (mB, nB, kB), swizzling mode (Swizzling Details), etc...). In my opinion this is the trickiest part of using the tcgen05.mma instructions because it&#x27;s a seemingly unnecessary complexity (likely because the formatting constraints are a hardware design artifact that we aren&#x27;t shielded from when programming this far down in the software stack, CuteDSL/CUTLASS/Triton et al. handle this kind of thing for you, albeit in exchange for less granular control and visibility into how the hardware is being programmed), and more importantly these formatting intricacies are very poorly explained in the PTX documentation.</p>
+<p>This next section explains how this data formatting works for the block-scaled tcgen05.mma instruction.</p>
+<p>Data formatting:</p>
+<p>First let&#x27;s see how to format the A and B blocks for a single MMA instruction:</p>
+<p>We can see from the mma instruction format that the location and format of the A/B blocks is determined by the a-desc/b-desc arguments to the mma instruction. These are &quot;matrix descriptors&quot;, which have the following format and describe how the tile is layed out in SMEM:</p>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-matrix-descriptors" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-matrix-descriptors</a></p>
+<pre class="code"><code>[0-13]  : encode( matrix start address )
+[16-29] : encode( LBO ) (Leading Byte Offset)
+[32-45] : encode( SBO ) (Stride Byte Offset)
+[46-48] : 0b001 (fixed constant)
+[49-51] : Matrix base offset
+[52]    : 0: byte offset relative ( other option is - 1: byte address absolute, not discussed yet here)
+[53-60] : 0xb00000000 (fixed constant)
+[61-63] : Swizzle (0. No swizzling 1. 128-Byte with 32B atomic swizzling 2. 128-Byte swizzling 4. 64-Byte swizzling 6. 32-Byte swizzling)</code></pre>
+<p>* encode(x) = (x &amp; 0x3FFFF) &gt;&gt; 4 (keep the first 14 bits, then divide by 16)</p>
+<p>In depth explanation for &quot;LBO&quot; and &quot;SBO&quot;:</p>
+<p>Before diving into what each field means we have to discuss the concept of a &quot;core matrix&quot;. This isn&#x27;t discussed anywhere in official NVIDIA docs as far as I can tell at the timing of writing, and (likely for that reason) LLMs hallucinate incorrect explanations for this concept. For some reason it&#x27;s something that one needs to infer based on how WGMMA instructions worked on Hopper and the requirements of tcgen05 MMA instructions.</p>
+<p>A core matrix is an 8xN byte tile, where N represents the number of bytes in the swizzle mode (Swizzling Details). If the specified swizzle mode is &quot;None&quot; then N is assumed to be 16. The size 8 dimension is taken along the M/N-dimension, and the N byte chunks are taken along the K-dimension. So if our matrix is stored in K-major format in GMEM, and we want to load it into SMEM for the &quot;None&quot; swizzle mode (meaning no shuffling of data to avoid bank conflicts), our core matrix would look like an 8x16B block. For K-major we store columns of core matrices contiguously, so if our MMA instruction ingests a 128x64 tile of A (NVFP4) (which can be broken down into 16 rows x 2 cols of core matrices), in shared memory we would store the 16 core matrices in the first column of core matrices contgiously followed by the 16 in the second column (with the 16B rows within each core matrix also being contiguous).</p>
+<p>Core matrix diagram (no-swizzle case, N = 16 bytes):</p>
+<pre class="diagram">  A single core matrix is 8 rows × 16 bytes laid out contiguously:
+
+         &lt;---------- 16 bytes ----------&gt;          ┐
+         ┌────┬────┬────┬─ ... ─┬────┬────┐        │
+  row 0  │ b0 │ b1 │ b2 │       │b14 │b15 │        │
+         ├────┼────┼────┼─ ... ─┼────┼────┤        │
+  row 1  │b16 │b17 │b18 │       │b30 │b31 │        │
+         ├────┼────┼────┼─ ... ─┼────┼────┤        │
+  row 2  │b32 │ ...                                 │  8 rows
+         ├─────────────────────────────────┤        │
+   ...   │                                          │
+         ├─────────────────────────────────┤        │
+  row 7  │b112│              ...      │b127│        │
+         └────┴────┴────┴─ ... ─┴────┴────┘        ┘
+
+  For a K-major 128 × 64 NVFP4 MMA tile (32 bytes wide in K = 2 core
+  matrix columns; 128 rows = 16 core matrix rows), SMEM layout is:
+
+      column 0 of CMs (K=[0,32))   column 1 of CMs (K=[32,64))
+      ┌──────────┐                 ┌──────────┐
+      │ CM[0,0]  │ ← address X     │ CM[0,1]  │ ← address X + LBO
+      ├──────────┤                 ├──────────┤
+      │ CM[1,0]  │ ← X + SBO       │ CM[1,1]  │
+      ├──────────┤                 ├──────────┤
+      │ CM[2,0]  │ ← X + 2*SBO     │ CM[2,1]  │
+      ├──────────┤                 ├──────────┤
+      │  ...     │                 │  ...     │
+      ├──────────┤                 ├──────────┤
+      │ CM[15,0] │                 │ CM[15,1] │
+      └──────────┘                 └──────────┘
+         contiguous in SMEM             then next column
+
+      SBO = 8 × 16 = 128 B   (stride to next CM in same column)
+      LBO = MN_DIM × 16  = 128 × 16 = 2048 B   (stride to next column of CMs)
+
+  The matrix descriptor&#x27;s &quot;matrix start address&quot; points at CM[0,0],
+  and LBO/SBO describe how to walk the rest of the tile.</pre>
+<p>This blog by Modular has an explanation that is pretty good, and where I sourced a large part of my understanding from: <a href="https://www.modular.com/blog/matrix-multiplication-on-nvidias-blackwell-part-2-using-hardware-features-to-optimize-matmul" target="_blank" rel="noopener noreferrer">https://www.modular.com/blog/matrix-multiplication-on-nvidias-blackwell-part-2-using-hardware-features-to-optimize-matmul</a></p>
+<p>This table (38) in the PTX docs describes the structure of a core matrix based on leading dimension and swizzle mode: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#asynchronous-warpgroup-level-swizzle-lead-dim" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#asynchronous-warpgroup-level-swizzle-lead-dim</a> This table then describes canonical layouts (essentially saying the same thing), but it&#x27;s a bit convoluted by the CuTe layouts: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-canonical-layouts" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-canonical-layouts</a></p>
+<p>Now LBO and SBO are much easier to understand: LBO is the number of bytes needed to reach the next column of core matrices (so, in our example above that would be 128*16B), hence the name &quot;Leading&quot; which is typically used to refer to the amount to stride to reach the start of another dimension. SBO refers to the number of bytes needed to reach the next core matrix within a column (which be 8*N bytes where N is the bytes in the swizzle mode (again &quot;None&quot; corresponds to 16)).</p>
+<pre class="data">&quot;matrix start address&quot; - This is the address of the start of the tile we are using for the MMA
+&quot;LBO&quot; - Explained above
+&quot;SBO&quot; - Explained above, together LBO and SBO enable us to describe the structure of the tile in SMEM in a way hardware can ingest (i.e. using core matrices)
+&quot;Matrix base offset&quot; - 0 unless using a swizzling algorithm whose pattern doesn&#x27;t start on a &quot;canonical&quot; boundary (not exactly sure on the details of how/why to use this)
+&quot;Swizzle&quot; - Which swizzle mode to use</pre>
+<p>Now let&#x27;s look at how to store the tiles of SFA and SFB which are used to scale the tiles of A and B. The scale factor tiles must reside in TMEM to be used by the mma instruction. TMEM is structured as 128 rows (called lanes) and 512 columns where each row/column element is a 32b (4B) unit (TMEM Details). The layout the mma instruction expects depends on the dimensions of the mma operation, but generally for 1B scale factors the m/n dimension is split up into chunks of size 32 and stacked next to each other. For example, if the SFA tile is 128x4 (corresponding to 128x64 NVFP4 A tile) then there would be 4 32x4 chunks layed out next each other in TMEM (occupying 32 lanes and 4 columns (each column holds 4 scale factors)). In the language of CuTe layouts this can be viewed as 32x4x4. The 32 row (lane) chunks get repeated 4 times to occupy the full columns. This will become more clear further down when we discuss copying the scale factor data from SMEM to TMEM. I suspect the reason for the repitition is due to a need by the hardware to access the same data for all 4 of the 32 lane partitions of a column. Similar to core matrices this is another hardware complexity that isn&#x27;t abstracted away at this level in the software stack.</p>
+<p>[Suggested in-line diagram — the diagrams at <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-block-scaling" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-block-scaling</a> also demonstrate what I describe here, specifically Figure 233.]</p>
+<p>SFA layout in TMEM for a 128 × 64 NVFP4 A tile (4 SFs per row, M = 128):</p>
+<pre class="diagram">                col 0   col 1   col 2   col 3
+              ┌───────┬───────┬───────┬───────┐
+   lane  0   │ sf[ 0]│ sf[ 0]│ sf[ 0]│ sf[ 0]│  ← row 0 of A
+   lane  1   │ sf[ 1]│ sf[ 1]│ sf[ 1]│ sf[ 1]│  ← row 1 of A
+   lane  2   │ sf[ 2]│ sf[ 2]│ sf[ 2]│ sf[ 2]│  ← row 2 of A
+     ...     │        ...                      │      ...
+   lane 31   │ sf[31]│ sf[31]│ sf[31]│ sf[31]│  ← row 31 of A
+              ├───────┼───────┼───────┼───────┤
+   lane 32   │ sf[32]│ sf[32]│ sf[32]│ sf[32]│  ← row 32 of A
+     ...     │  (next 32-row chunk, columns repeat the same way)│
+   lane 63   │ sf[63]│ sf[63]│ sf[63]│ sf[63]│
+              ├───────┼───────┼───────┼───────┤
+   lane 64-95│   (next 32-row chunk)                            │
+              ├───────┼───────┼───────┼───────┤
+   lane 96-127│  (last 32-row chunk)                            │
+              └───────────────────────────────┘
+
+  CuTe-style: 32 × 4 × 4 — i.e. four 32-lane × 4-col sub-tiles stacked
+  along M, with each sub-tile&#x27;s payload also broadcast 4× across cols
+  (the column repetition is the &quot;multicast&quot; referred to by
+  `tcgen05.cp ... .warpx4` on the SMEM→TMEM copy).</pre>
+<p>Next we look at how the result of the mma op is stored in TMEM. There are a number of different formats depending on the configuration of the executed mma instruction, the details of those formats are outlined in this table:</p>
+<p><a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-data-path-layout-organization" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-data-path-layout-organization</a></p>
+<p>These layouts describe how the output data is stored or accumulated into the TMEM buffer passed to the mma instruction via the d-tmem argument.</p>
+<p>Many options in that table likely don&#x27;t make much sense at the moment; however, the most important options are M and cta_group. M is just the size of M being computed by the mma instruction (which computes an MxN block from the MxK and KxN chunks from A and B in SMEM). Refer to CTA_GROUP Details for more info on this hardware feature which will be used in later kernels. For now we use cta_group == 1 which leaves us with Layout D:</p>
+<p>[Suggested in-line diagram — the canonical NVIDIA figure is at <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-data-path-layout-d" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-data-path-layout-d</a>]</p>
+<p>TMEM Layout D for an M × N output tile (M = 128, N = 64 example):</p>
+<pre class="diagram">                col 0    col 1    col 2   ...   col 63
+              ┌────────┬────────┬────────┬────────┐
+  lane   0   │ C[ 0,0]│ C[ 0,1]│ C[ 0,2]│ C[ 0,63]│  ┐
+  lane   1   │ C[ 1,0]│ C[ 1,1]│ C[ 1,2]│  ...    │  │  warp 0
+   ...       │   ...                                │  │ owns rows 0-31
+  lane  31   │ C[31,0]│ ...    │ ...    │ C[31,63]│  ┘
+              ├────────┼────────┼────────┼────────┤
+  lane  32   │ C[32,0]│ ...    │ ...    │ C[32,63]│  ┐  warp 1
+   ...       │   ...                                │  │ owns rows 32-63
+  lane  63   │ C[63,0]│ ...                C[63,63]│  ┘
+              ├────────┼────────┼────────┼────────┤
+  lane  64   │ C[64,0]│ ...                         │  ┐  warp 2
+   ...       │                                      │  │ owns rows 64-95
+  lane  95   │                                      │  ┘
+              ├────────┼────────┼────────┼────────┤
+  lane  96   │ C[96,0]│                             │  ┐  warp 3
+   ...       │                                      │  │ owns rows 96-127
+  lane 127   │ C[127,0] ...               C[127,63]│  ┘
+              └─────────────────────────────────────┘
+
+  Each TMEM cell is a full 32-bit slot. With FP32 accumulation each
+  cell holds one C[i, j] result. With smaller output dtypes the high
+  bits go unused. A single warp can only address 32 contiguous lanes
+  of TMEM via tcgen05.ld, so the 4 epilogue warps must each issue
+  loads against their respective 32-lane band to cover M = 128.</pre>
+<p>In Layout D each lane in the TMEM buffer holds a row of the output and each column holds a column of the output (the data is unpacked, so if the output data type of the MMA is &lt; 32b the upper unused bits in each column just get ignored). So if our mma instruction computes an MxN block of output called C, TMEM[i][j] = C[i][j]. Thus for our row major MxN output tile, it&#x27;s stored in M rows (lanes) across N columns in TMEM. The caveat which is demonstrated in the linked diagram is that a single warp can only access 32 lanes of TMEM, which means you need 4 warps to access a M=128 row-major output. This last point is also likely a hardware design artifact we aren&#x27;t shielded from as I can&#x27;t find a logical reason for requiring 4 warps to access all 128 lanes of TMEM.</p>
+<p>In summary we now understand how the input data (A, B, SFA, SFB) is stored and provided to the mma instruction as well as how the output data is produced in the provided TMEM buffer (and how to properly access that data). The next step is to configure the mma instruction itself so it knows the dimensions of the input and output blocks, the data types, etc...</p>
+<p>This is all configured through the instruction descriptor (i-desc). Official PTX docs on this descriptor field can be found here: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-instruction-descriptor" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-instruction-descriptor</a></p>
+<p>We will look at the specific format for NVFP4 (all type formats can be seen at that link). For NVFP4:</p>
+<p>The important fields are...</p>
+<pre class="code"><code>[2]     : Sparsity (Dense = 0, Sparse = 1)
+[4-5]   : Matrix B Scale Factor Data ID
+[13]    : Negate A Matrix
+[14]    : Negate B Matrix
+[15]    : Transpose A Matrix
+[16]    : Transpose B Matrix
+[17-22] : N, Dimension of Matrix B (3 LSBs not included)
+[23]    : Scale Matrix Type, for both scale_A / scale_B (UE4M3 = 0)
+[27-28] : M, Dimension of Matrix A (7 LSBs not included)
+[29-30] : Matrix A Scale Factor Data ID
+[31]    : K Dimension (Dense K=64 / Sparse K=128) = 0)</code></pre>
+<pre class="data">&quot;Sparsity&quot; - MMAs can operate on sparse or dense matrix formats, this is the selector (0 = Dense)
+&quot;Matrix B Scale Factor Data ID&quot; - Specifies the byte offset within each TMEM column where the scale factors are located to form the SF matrix. So for example if you are working with a format that uses 1 SF per row, the 32 row chunks are separated across separate TMEM columns (spaced apart by 4 &quot;byte sized&quot; columns).
+&quot;Negate A Matrix&quot; - Make A matrix elements negative (only supported for certain configs)
+&quot;Negate B Matrix&quot; - Make B matrix elements negative (only supported for certain configs)
+&quot;Transpose A Matrix&quot; - Transpose A then multiply (only supported for certain configs)
+&quot;Transpose B Matrix&quot; - Transpose B then multiply (only supported for certain configs)
+&quot;N Dimension&quot; - N in the KxN tile used for the MMA (only accepts certain values depending on data type and MMA format)
+&quot;Scale Matrix Type&quot; - UE8M0 = 1, UE4M3 = 0
+&quot;M Dimension&quot; - M in the MxK tile used for the MMA (only accepts certain values depending on data type and MMA format)
+&quot;Matrix A Scale Factor Data ID&quot; - Same as for B, but for the A scale factor matrix
+&quot;K Dimension&quot; - K in MxK and KxN tiles for the MMA (the exact value is determined by the other configuration inputs to the MMA)</pre>
+<p>The last two fields in the mma instruction that we haven&#x27;t touched on yet are scale_vectorsize and enable-input-d. enable-input-d is a predicate register containing a boolean value (false means zero out the d-tmem region of the output, so no accumulation. True means accumulate the result with the existing data in d-tmem). In otherwords we want enable-input-d to be false on the first k iteration, but true for all later iterations.</p>
+<p>scale_vectorsize determines how many scale factors are used per row/col of the input tiles. The below image demonstrates how this parameter dictates the size of K for out input blocks. For all of our kernels we use the maximum number of scale factors supported by hardware, which is 4 (.scale_vec::4X or .block16, these are aliases). 4 scale factors per row/col of the A/B tiles results in K=64 for each of our tiles (this is because NVFP4 supports size 16 blocks per scale factor so 4*16 = 64 elements along the k-dimension).</p>
+<p>To better understand the constraints on what size tiles can be computed we can look to this table: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-kind-shapes" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-kind-shapes</a> which shows us that for dense NVFP4 the MMA tile for N-dimension is limited to multiples of 8 and M is limited to 128. These can change slightly using something called 2SM or CTA pairs, which will be discussed in future kernels.</p>
+<p>[Diagram at <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-mma-block-scaling" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-mma-block-scaling</a>]</p>
+<p>At this point we understand the basic inputs and outputs of the tcgen05.mma instruction as well as how to configure the instruction to perform the desired multiplication.</p>
+<p>Next we can discuss how data will be moved. Specifically, how input data will be moved from GMEM-&gt;SMEM, SMEM-&gt;TMEM (for scale factors), and how output data will be moved from TMEM-&gt;Regs-&gt;GMEM. First I list the instructions used (along with their syntax) as well as a broad description of their functionality. In the code walkthrough section further down I go over exactly how these instructions are configured and use in the code.</p>
+<p>GMEM-&gt;SMEM:</p>
+<p>For this we use TMA (Tensor Memory Accelerator), this was briefly mentioned in the last few iterations of the GEMV kernel.  which is really a name for the family of cp.async.bulk instructions in PTX. For out implementation we would like to copy a multi-dimensional tile so we will use the cp.async.bulk.tensor instructions. Plain cp.async.bulk instructions only support contiguous 1D transfers, not multi-dimensional strided transfers. Specifically, this version below allows us to copy from GMEM to DSMEM (Distributed Shared Memory of a CTA cluster). Copying to DSMEM allows us to use what is referred to as &quot;TMA Multi-Cast&quot; which allows us to copy one tensor segment from GMEM to the SMEM of multiple CTAs within a CTA cluster (DSMEM Details):</p>
+<pre class="code"><code>// global -&gt; shared::cluster
+cp.async.bulk.tensor.dim.dst.src{.load_mode}.completion_mechanism{.multicast}{.cta_group}{.level::cache_hint}
+                                   [dstMem], [tensorMap, tensorCoords], [mbar]{, im2colInfo}
+                                   {, ctaMask} {, cache-policy}
+
+.dst =                  { .shared::cluster }
+.src =                  { .global }
+.dim =                  { .1d, .2d, .3d, .4d, .5d }
+.completion_mechanism = { .mbarrier::complete_tx::bytes }
+.cta_group =            { .cta_group::1, .cta_group::2 }
+.load_mode =            { .tile, .tile::gather4, .im2col, .im2col::w, .im2col::w::128 }
+.level::cache_hint =    { .L2::cache_hint }
+.multicast =            { .multicast::cluster  }</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor</a></p>
+<p>We also need the variant which loads to a single CTA:</p>
+<pre class="code"><code>// global -&gt; shared::cta
+cp.async.bulk.tensor.dim.dst.src{.load_mode}.completion_mechanism{.cta_group}{.level::cache_hint}
+                                   [dstMem], [tensorMap, tensorCoords], [mbar]{, im2colInfo} {, cache-policy}
+
+.dst =                  { .shared::cta }
+.src =                  { .global }
+.dim =                  { .1d, .2d, .3d, .4d, .5d }
+.completion_mechanism = { .mbarrier::complete_tx::bytes }
+.cta_group =            { .cta_group::1, .cta_group::2 }
+.load_mode =            { .tile, .tile::gather4, .im2col, .im2col::w, .im2col::w::128 }
+.level::cache_hint =    { .L2::cache_hint }</code></pre>
+<p>These instructions allow us to copy data from GMEM to SMEM in the format required. In the case of the NVFP4 data in A and B that format is columns of core matrices of appropriate size, and in the case of the scale factors it&#x27;s the (32x4)x4 layout required by TMEM. Further details on how TMA works are available in the <a class="xref" href="/projects/nvfp4/nvfp4_glossary.html">[TMA Details]</a> section, and how it&#x27;s used in the context of these transfers and data structuring is available in the code walkthrough section further down.</p>
+<p>SMEM-&gt;TMEM:</p>
+<p>As discussed, the mma instruction requires the scale factor data to be resident in TMEM. Thus we must copy the scale factor data from GMEM to SMEM, then from SMEM to TMEM. There is no way to copy data directly from GMEM into TMEM. Assuming the scale factor data is already present in SMEM we can use the tcgen05.cp instruction to copy it into TMEM.</p>
+<pre class="code"><code>tcgen05.cp.cta_group.shape{.multicast}{.dst_fmt.src_fmt} [taddr], s-desc;</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp</a></p>
+<p>TMEM-&gt;Regs:</p>
+<p>Once the results have been computed and accumulated in TMEM across the k-dimension and we are ready to store the results back to GMEM we must first move the results out of TMEM and into the register file. There is currently no way to move blocks of data directly from TMEM into SMEM or GMEM, the data must first be moved to registers and then any method of data movement out of the registers can be used. The instruction to move data from TMEM -&gt; Registers is the tcgen05.ld instruction.</p>
+<pre class="code"><code>tcgen05.ld.sync.aligned.shape1.num{.pack}.b32    r, [taddr];</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-ld" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-ld</a></p>
+<p>I cover the details about both tcgen05.cp and tcgen05.ld in the code walkthrough. What&#x27;s important to understand now is the broad function of these operations.</p>
+<p>Regs-&gt;GMEM:</p>
+<p>Finally we can use many methods to transfer the data from registers to GMEM. This includes simple coalesced stores, or we could store to SMEM first and initiate a TMA (cp.async.bulk) from SMEM -&gt; GMEM. In this simple GEMM example we just use simple stores. In future kernels we will look at other methods and their potential benefits.</p>
+<p>At this point we have a good idea of how data is moved and processed using tcgen05 instructions and tensor cores / tensor memory. Now we can revisit the design of our GEMM kernel with this information in mind:</p>
+<p>For a single CTA this is the algorithm flow:</p>
+<p>Assume we have allocated SMEM with enough room for the following:</p>
+<h3 class="topic" id="a-block-mbxkb-of-nvfp4">A-block (mBxkB of nvfp4)</h3>
+<h3 class="topic" id="b-block-kbxnb-of-nvfp4">B-block (kBxnB of nvfp4)</h3>
+<h3 class="topic" id="sfa-block-mbx-kb-16-of-e4m3">SFA-block (mBx(kB/16) of e4m3)</h3>
+<h3 class="topic" id="sfb-block-kb-16-xnb-of-e4m3">SFB-block ((kB/16)xnB of e4m3)</h3>
+<h3 class="topic" id="allocate-tmem-need-room-for-sfa-block-sfb-block-c-block">Allocate TMEM (need room for SFA-block, SFB-block, C-block)</h3>
+<h3 class="topic" id="for-each-k-block-i-e-for-every-kb-sized-block-along-the-k-di">For each k-block (i.e. for every kB sized block along the k-dimension):</h3>
+<h3 class="topic" id="load-sfa-block-sfb-block-into-smem">Load SFA-block, SFB-block into SMEM</h3>
+<h3 class="topic" id="load-a-block-b-block-into-smem">Load A-block, B-block into SMEM</h3>
+<h3 class="topic" id="copy-sfa-block-sfb-block-into-tmem">Copy SFA-block, SFB-block into TMEM</h3>
+<h3 class="topic" id="execute-mma">Execute mma</h3>
+<h3 class="topic" id="move-c-block-into-cta-regs">Move C-block into CTA regs</h3>
+<h3 class="topic" id="move-c-block-from-cta-regs-to-gmem">Move C-block from CTA regs to GMEM</h3>
+<h3 class="topic" id="deallocate-tmem">Deallocate TMEM</h3>
+<p>We can think of this algorithm in terms of stages:</p>
+<p>Stages:    |     0      |     1      |    2    |     3      |     4      | Action:    | GMEM-&gt;SMEM | SMEM-&gt;TMEM | Compute | TMEM-&gt;Regs | Regs-&gt;GMEM |</p>
+<p>Stages 0-2 execute in a loop for each k-iteration (each k-iteration covers a kB sized block along K, this is the k-loop). CUTLASS refers to this as the &quot;GEMM&quot;. Stages 3-4 execute after the k-loop once the CTA has fully computed the result tile. CUTLASS refers to this as the &quot;epilogue&quot;.</p>
+<p>For an example setup of how to use CUTLASS for a GEMM operation like this see submission_cutlass.py.</p>
+<p>If we were to program this algorithm using just the tcgen05 instructions we&#x27;ve discussed thus far it would very likely fail for various reasons including non-deterministic correctness failures. It may also occasionally produce correct results. My operating systems professor would call these kinds of bugs &quot;Heisenbugs&quot; after Werner Heisenberg&#x27;s uncertainty principle in quantum mechanics. Race conditions, for example, are a subset of these kinds of non-deterministic bugs. Like in systems programming, and unlike quantum mechanics (luckily for us :), these &quot;Heisenbugs&quot; are very often due to a failure to design software in a way that guarantees data is only consumed or overwritten when it&#x27;s appropriate based on whatever guarantees the hardware has granted to the software. Without correct software design the output of the program can be impacted by operation timing and external processes.</p>
+<p>In our case we have to ensure that no two stages are writing to and reading from the same memory (GMEM, SMEM, TMEM, Regs) at the same time. Specifically we need to create the following guarantee using software synchronization tools:</p>
+<h3 class="topic" id="stage-n-completes-before-stage-n-1-begins-for-n-0-3">stage n completes before stage n+1 begins for n = 0 ... 3</h3>
+<h3 class="topic" id="stage-4-completes-before-stage-0-begins-for-the-next-k-itera">stage 4 completes before stage 0 begins for the next k-iteration</h3>
+<p>From the above few lines we can see a &quot;producer consumer&quot; structure appear in that stage n produces data that is consumed by stage n + i where i &gt; 0. This producer consumer structure is referred to heavily in many CUDA libraries because it&#x27;s a very helpful structure to maintain synchronization guarantees in software as kernel algorithms become more complex.</p>
+<p>For a more comprehensive overview of memory consistency and synchronization on NVIDIA GPUs see this section: <a class="xref" href="/projects/nvfp4/nvfp4_glossary.html">[Memory Consistency and Synchronization Details]</a> as well as the official documentation here: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#memory-consistency-model." target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#memory-consistency-model.</a> In the below description of how to create the guarantees mentioned above I&#x27;ll just discuss the synchronization tools necessary and how they function instead of their more intricate and theoretical role in the overall memory consistency philosophy in NVIDIA GPU architecture.</p>
+<p>Stage 0 (Produces GMEM data tiles in SMEM for current k-iteration) -&gt; Stage 1 (Consumes SMEM scale factors tiles): Stage 0 uses TMA to transfer data from GMEM to SMEM. Thus we need to ensure the transfers have completed and the data is visible in SMEM to all threads participating in stage 1. Luckily there is a synchronization primitive to notify threads when transfers or operations have completed that works seamlessly with tcgen05 and cp.async.bulk operations. This primitive is called an mbarrier (short for memory barrier), also sometimes referred to in short hand as mbar objects. In the context of cp.async.bulk instructions the mbarrier primitive gives software the ability to both track and wait on the completion of data transfers. In particular, we can program an mbarrier object to expect x number of bytes, then pass that mbarrier to all of our TMA operations (note the mbar argument to the cp.async.bulk.tensor operations above). Those TMA operations will then notify that mbarrier object of how many bytes were transferred after the transfer is complete. I go over mbarriers in more detail in the glossary.</p>
+<p>mbarriers also provide the ability to wait on them until the number of expected bytes have arrived. This is key to ensuring the threads in a CTA don&#x27;t start stage 1 until the TMAs from stage 0 have completed. We use this to force our kernel to halt execution (yielding to other warps on the SM that can run) until the data from GMEM is available in SMEM.</p>
+<p>Stage 1 (Produces scale factors in TMEM) -&gt; Stage 2 (Consumes TMEM scale factors for tcgen05.mma operation): tcgen05.cp instructions are guaranteed to complete in program order before tcgen05.mma operations according to the tcgen05 pipelining rules here: &lt;PTX Link&gt; which means we actually don&#x27;t need any explicit synchronization mechanism here.</p>
+<p>After the k-loop has completed and the CTA has computed the final result in the result TMEM buffer...</p>
+<p>Stage 2 (Produces MMA Result for this CTA in TMEM) -&gt; Stage 3 (Consumes TMEM result to copy into registers): In order to ensure the last MMA has completed before we copy the result from TMEM to Regs we can again use an mbarrier. In addition to tracking if x number of bytes have been successfully transferred into SMEM, mbarriers can also track the completion of tcgen05 operations like tcgen05.mma. The tcgen05.commit instruction programs the given mbarrier to track the completion of all prior tcgen05.mma/cp/shift instructions in program order. Similar to what we did with stage 0 and 1 we can have stage 3 wait on this mbarrier which will force it to wait until all tcgen05.mma operations from stage 2 have completed, thus ensuring the data is ready in TMEM before stage 3 copies it into registers using tcgen05.ld.</p>
+<p>In addition to the mbarrier we also need something called a fence. PTX has a number of fence types including memory and tcgen05. I discuss the different types of fences in more detail in the glossary. For our purposes here we need a tcgen05 fence which is used to ensure ordering of asynchronous tcgen05 instructions. Specifically, we need the tcgen05.fence::after_thread_sync which does the following per the PTX docs:</p>
+<p>An asynchronous tcgen05 operation subsequent to a tcgen05.fence::after_thread_sync is ordered after all the prior tcgen05 and the execution ordering operations.</p>
+<p>This means the tcgen05.ld instructions used by stage 3 to load the registers from TMEM can&#x27;t be reordered or executed before the tcgen05.mma and tcgen05.commit instructions from stage 2 have completed. This is important because asynchronous tcgen05 operations may execute and complete in a different order than they were issued.</p>
+<p>Stage 3 (Produces results in registers) -&gt; Stage 4 (Consumes results in registers to store to GMEM): We need to ensure the tcgen05.ld instructions have completed before we store the results from the registers to GMEM. PTX provides us the ability to track the completion of tcgen05.ld operations (and others) via tcgen05.wait. Specifically, we need the tcgen05.wait::ld variant which tracks specifically tcgen05.ld operations.</p>
+<p>Lastly due to how standard GMEM stores are ordered we know these will complete before meaningful work in the next k-iteration will start.</p>
+<p>At this point we&#x27;ve covered all concepts and broad functionality needed to create a basic GEMM kernel using tcgen05 operations (leveraging tensor cores on the Blackwell architecture). Before we dive into a walkthrough of the code to cover some of the finer grained details we should discuss a few optimizations that are very powerful and don&#x27;t change our code all that much.</p>
+<h3 id="basic-gemm-optimizations">Basic GEMM Optimizations</h3>
+<p>Our current kernel design is entirely sequential per CTA. In other words every stage (referring to the stages of data movement and computation above) both within and across k-iterations happens sequentially. As we&#x27;ve established it&#x27;s required for the stages to progress sequentially within a single k-iteration to ensure correctness; however, there&#x27;s no reason we can&#x27;t overlap work across different k-iterations if each iteration is using it&#x27;s own buffers in SMEM/TMEM.</p>
+<p>For example let&#x27;s say we use two sets of SMEM buffers (so there will be 8 buffers total per CTA, 2 sets of 4 buffers each (A, B, SFA, SFB)). Now instead of stage 0 of k-iteration 1 having to wait for stage 2 of k-iteration 0 to complete, it can proceed right away with loading the second set of buffers. Likewise stage 0 of k-iteration 2 can proceed once stage 2 of k-iteration 0 has completed instead of waiting on k-iteration 1. This technique of overlapping different stages of computation is also called pipelining. Since we&#x27;ve used pipelining in the context of hardware and PTX instructions already I&#x27;ll refer to this kind of pipelining as software pipelining. The software pipeline described is of length 2, but this can be extended out to an N stage pipeline, and we can design our kernel to take N as a parameter. Below are a few diagrams demonstrating this kind of software pipelining.</p>
+<p>Software pipelining diagram (N = 2-stage, sequential vs pipelined):</p>
+<pre class="diagram">  Sequential (single SMEM buffer set, 1 k-iter at a time):
+
+    k-iter 0: [Stage 0: GMEM→SMEM][Stage 1: SMEM→TMEM][Stage 2: MMA]
+    k-iter 1:                                                       [S0][S1][S2]
+    k-iter 2:                                                                   [S0][S1][S2]
+
+  2-stage pipeline (two SMEM buffer sets, alternating):
+
+    buf 0:    [Load k-iter 0   ][MMA k-iter 0  ]                  [Load k-iter 2   ][MMA k-iter 2 ]
+    buf 1:                       [Load k-iter 1   ][MMA k-iter 1  ]
+                                 └── overlap ────┘└─── overlap ───┘
+
+  N-stage pipeline (N sets of SMEM buffers): producer (TMA warp) can
+  race ahead by up to N k-iters before having to wait on the consumer
+  (MMA warp), giving deeper overlap at the cost of N× SMEM footprint.
+
+  ┌────────────┐      mbar_tma[s]      ┌────────────┐
+  │  TMA warp  │ ──── signals on ────► │  MMA warp  │
+  │ (producer) │                       │ (consumer) │
+  │            │ ◄─── signals on ───── │            │
+  └────────────┘    mbar_mma[s]        └────────────┘
+       fills SMEM[s]                    consumes SMEM[s]
+       (waits if MMA hasn&#x27;t released)   (waits if TMA hasn&#x27;t filled)
+
+  Two mbarriers per stage are required so neither side overruns the
+  other once the pipeline is full.</pre>
+<p>In future kernels the concept of software pipelining will be extended to get even better overlap between different computational stages of the kernel.</p>
+<p>The remaining question is, aside from allocating N sets of SMEM buffers for an N-stage software pipeline, how do we implement this conceptually? The answer is warp specialization <a class="xref" href="/projects/nvfp4/nvfp4_glossary.html">[Warp Specialization Details]</a>. In our pre-software pipelining kernel we only needed 4 warps per CTA so that we could access all of TMEM and perform sufficiently parallelized stores to GMEM from registers. When using tcgen05 most operations only require a single thread or single warp to initiate the work, thus kernels which primarily use tcgen05 don&#x27;t actually need that many threads, since the threads aren&#x27;t really doing the computational work themselves anymore, only initiating that work and tracking its completion. In pre-Blackwell or non-tcgen05 kernels the amount of work and problem shape can influence how many threads are launched and in what configuration. In tcgen05 kernels it&#x27;s the structure of the kernel itself and what kind of work needs to be done (and not the amount or shape of the work) that dictates how many threads are launched per CTA. Warp specialization refers to figuring out how many structural pieces there are in the kernel, and assigning each of those pieces to one or a few warps. Warps in the kernel then only focus on the specific task within the kernel to which they are assigned.</p>
+<p>In this case we have 5 computational stages in our kernel, but some of them can be grouped together. Stages 1 and 2 should be grouped together because tcgen05.cp and tcgen05.mma operations need to be performed in a loop if we decide to load multiple MMA tiles at a time from GMEM into SMEM. This will become clearer in the code walkthrough. We also can&#x27;t overlap tcgen05.cp with tcgen05.mma as defined by the hardware. Stages 3 and 4 should be grouped together because we need to perform tcgen05.ld operations and GMEM stores from registers in a loop to avoid using too many registers in a single CTA (which could cause occupancy issues). The details of tcgen05.ld are discussed in the code walkthrough as well.</p>
+<p>We end up with 3 groups of computational tasks in our kernel: Loading from GMEM-&gt;SMEM, Copying scale factors from SMEM-&gt;TMEM and performing MMA, and loading the result from TMEM into registers and storing to GMEM. Applying the concept of warp specialization is now simple, we just assign a warp of set of warps to each of these three tasks. We need four warps for the last task in order to access all of TMEM. The first two tasks only require issuing single thread or warp wide operations, so each only needs a single warp. This leaves us with a 6 warp kernel (or 192 threads).</p>
+<p>Let&#x27;s look at what each warp does and see how it implements the software pipelining described above for an N-stage software pipeline:</p>
+<p>Warp 0 (TMA Warp, Stage 0): =&gt; Kernel setup =&gt; For k-iter in k-iterations:</p>
+<pre class="diagram">    =&gt; Wait until SMEM buffers in software pipeline slot (k-iter % N) are free (i.e. not in use by the MMA warp for any previous k-iters)
+    =&gt; Load data into buffers for k-iter</pre>
+<p>Warp 1 (MMA Warp, Stages 1 and 2): =&gt; Kernel setup =&gt; For k-iter in k-iterations:</p>
+<pre class="diagram">    =&gt; Wait until SMEM buffers in software pipeline slot (k-iter % N) have their data loaded by the TMA warp
+    =&gt; Copy scale factors from SMEM -&gt; TMEM
+    =&gt; Execute MMAs for this k-iter (accumulating in TMEM)</pre>
+<p>Warps 2-5 (Epilogue Warps, Stages 3 and 4): =&gt; Kernel setup =&gt; Wait for warp 1 to complete computation for all k-iterations =&gt; Move results from TMEM to Regs to GMEM</p>
+<p>There are two things to note here: first, we need 2 mbarriers per software pipeline stage to enforce both that the consumer doesn&#x27;t consume data before it has been produced and that the producer doesn&#x27;t overwrite data still being consumed (before software pipelining we only needed the former). Second, we now can see how software pipelining has decoupled the work across k-iterations for warp 0 and warp 1. Since all buffers in the software pipeline are initially free warp 0 can steam ahead and load all of the buffers through k-iter N-1 without waiting for warp 1 to complete computation. Similarly, warp 1 won&#x27;t have to wait as long (or at all) for warp 0 to load the data since those transactions happened while it was still computing a previous k-iter MMA.</p>
+<p>There are many more optimizations available, and we will discuss them in the upcoming kernels. For now we lay the foundation of the next two kernels including the main optimization idea of warp specialization and software pipelining. In the next section I map the concepts discussed onto the actual code in order to dive a bit deeper on the functional details, and to help setup a background that will be helpful in understanding the subsequent kernels.</p>
+<h3 id="code-walkthrough">Code Walkthrough</h3>
+<p>In this walkthrough I&#x27;ll be skipping over parts of the code that should be pretty self explanatory if one understands basic CUDA/C++.</p>
+<h2 id="data-details">- Data Details -</h2>
+<p>Crucial points for understanding the techinical details that follow in this section:</p>
+<h3 class="topic" id="data-for-a-b-sfa-and-sfb-are-stored-in-k-major-order-so-row-">Data for A, B, SFA, and SFB are stored in k-major order (so row-major for A/SFA and column-major for B/SFB)</h3>
+<h2 id="kernel-setup">- Kernel Setup -</h2>
+<p>There are two important parts of the kernel setup: mbarrier initialization and tmem buffer allocation.</p>
+<pre class="code"><code>    // Setup memory barriers
+    __shared__ alignas(8) int64_t mbars[PIPE_STAGES * 2 + 1];
+    const int mbar_addr_tma = static_cast&lt;int&gt;(__cvta_generic_to_shared(mbars));
+    const int mbar_addr_mma = mbar_addr_tma + PIPE_STAGES * 8; // 8 because each mbar is 64bits = 8B
+    const int mbar_addr_epi = mbar_addr_mma + PIPE_STAGES * 8;
+
+    if (warp_id == 0 &amp;&amp; elect_one_sync()) {
+        for (int i = 0; i &lt; PIPE_STAGES * 2 + 1; i++) {
+            mbar_init(mbar_addr_tma + i * 8, 1);
+        }
+        asm volatile(&quot;fence.mbarrier_init.release.cluster;&quot;);
+    } else if (warp_id == 1) { 
+        tcgen05_alloc_tmem&lt;1&gt;(tmem_addr_ptr, TD_MMA_N*2); 
+    }
+    __syncthreads(); // Ensure all threads have correct TMEM ptrs</code></pre>
+<p>In this code snippet we declare and initialize PIPE_STAGES * 2 + 1 mbarriers. As mentioned above we need 2 mbarriers per software pipeline stage to ensure correctness and we need one more additional mbarrier to make the epilogue warps wait for the results to be fully computed in TMEM before proceeding to store them to GMEM. We initialize the mbarriers with a count of 1 because only one thread needs to arrive on each barrier before it can be flipped and allow waiting threads to proceed (for more details on this see Synchronization Details). Only one thread is needed to perform the initializations, which introduces us to another function: <code>elect_one_sync()</code>.</p>
+<pre class="code"><code>__device__ uint32_t inline elect_one_sync() {
+    uint32_t pred = 0;
+    asm volatile(
+        &quot;{\\n&quot;
+        &quot;.reg .pred %%px;\\n&quot;
+        &quot;elect.sync _|%%px, %1;\\n&quot;
+        &quot;@%%px mov.s32 %0, 1;\\n&quot;
+        &quot;}&quot;
+        : &quot;+r&quot;(pred)
+        : &quot;r&quot;(0xFFFFFFFF)
+    );
+    return pred;
+}</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-elect-sync" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-elect-sync</a></p>
+<p>This function ultimately returns 1 (or true) if the executing thread has been &quot;elected&quot; and 0 (or false) otherwise. For a thread to be &quot;elected&quot; means it&#x27;s the one unique thread chosen out of a subset of threads in warp. We do this with the elect.sync instruction which elects one predicated active leader thread from among a set of threads specified by membermask (in our case this mask includes all 32 threads in a warp). The laneid of the elected thread is returned in the 32-bit destination operand d. The sink symbol ‘_’ is used for destination operand d. The predicate destination p is set to True for the leader thread, and False for all other threads.</p>
+<p>As we look over the rest of the code you will notice we use <code>elect_one_sync()</code> repeatedly, and you would be correct in assuming we may run into issues if a different thread in the warp is chosen each time this gets run. Luckily, election of a leader thread happens deterministically, i.e. the same leader thread is elected for the same membermask every time. The  .sync qualifier indicates that this instruction causes the executing thread to wait until all threads in the membermask execute the elect instruction before resuming execution.</p>
+<p>The last step in the initial kernel setup code snippet is TMEM buffer allocation. To understand this we look at <code>tcgen05_alloc_tmem()</code>:</p>
+<pre class="code"><code>// Warp synchronous execution (all threads in a warp execute)
+template&lt;int CTA_GROUP&gt;
+__device__ void inline tcgen05_alloc_tmem(int *tmem_addr_ptr, const int n_cols) {
+    // Performs a cvt.u64.u32, enables proper passing of smem ptr to PTX assembly
+    const int tmem_addr_ptr_cvt = static_cast&lt;int&gt;(__cvta_generic_to_shared(tmem_addr_ptr));
+    asm volatile (
+        &quot;tcgen05.alloc.cta_group::%2.sync.aligned.shared::cta.b32  [%0], %1;&quot;
+        :
+        : &quot;r&quot;(tmem_addr_ptr_cvt), &quot;r&quot;(n_cols), &quot;n&quot;(CTA_GROUP)
+    );
+}</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-memory-alloc-manage-instructions" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-memory-alloc-manage-instructions</a></p>
+<p>The tcgen05.alloc operation is a blocking instruction which dynamically allocates the specified number of columns in the Tensor Memory and writes the address of the allocated Tensor Memory into shared memory at the location specified by address operand dst. Thus tcgen05_alloc_tmem will attempt to allocate n_cols of TMEM, and put the TMEM address of that allocation into the smem address specified by tmem_addr_ptr. There are two important constraints when it comes to TMEM allocation:</p>
+<p>1 - Partial column allocations aren&#x27;t possible, only whole columns can be allocated. 2 - 32 is the minimum number of columns that can be allocated for a single tcgen05.alloc call, and the number of columns must be a power of 2 for a single allocation.</p>
+<p>In our kernel we really need three TMEM buffers: a result buffer, SFA buffer, and SFB buffer. We could choose to do two or three separate allocations for each of these buffers, but in most kernel configurations we don&#x27;t gain anything by doing that. Instead, we make one allocation of TD_MMA_N*2 columns (or twice the size of the result buffer). Then we distribute that allocated buffer to different TMEM pointers to be used for different purposes. This way we still get granularity of TMEM buffers (avoiding unused space) while reducing the number of tmem allocation calls which could become expensive, especially if multiple CTAs share a single SM.</p>
+<h2 id="tma-warp">- TMA Warp -</h2>
+<p>After kernel setup the pseudo-code for the TMA warp looks like this: =&gt; For k-iter in k-iterations:</p>
+<pre class="diagram">    =&gt; Wait until SMEM buffers in software pipeline slot (k-iter % N) are free (i.e. not in use by the MMA warp for any previous k-iters)
+    =&gt; Load data into buffers for k-iter</pre>
+<p>The actual code to implement this looks like the following:</p>
+<pre class="code"><code>    // TMA thread loops over SMEM tile stages and loads from GMEM-&gt;SMEM
+    if (warp_id == TMA_WARP &amp;&amp; elect_one_sync()) {
+        auto tma_load_stage = [&amp;](const int k_off, const int stage) {
+            const int k_off_coremat = k_off / WIDTH_COREMAT;
+            const int a_smem_stage_ptr = a_smem_ptr + stage * A_SMEM_TILESZ;
+            const int b_smem_stage_ptr = b_smem_ptr + stage * B_SMEM_TILESZ;
+            const int sfa_smem_stage_ptr = sfa_smem_ptr + stage * SF_SMEM_TILESZ;
+            const int sfb_smem_stage_ptr = sfb_smem_ptr + stage * SF_SMEM_TILESZ  * (TD_MMA_N == 256 ? 2 : 1);
+            const int mbar_addr_tma_stage = mbar_addr_tma + stage * 8;
+
+            tcgen05_3dtma_g2s_ab&lt;1&gt;(a_smem_stage_ptr, &amp;tmap_a, m_off, k_off_coremat, mbar_addr_tma_stage, CacheHintSm100::EVICT_NORMAL);
+            tcgen05_3dtma_g2s_ab&lt;1&gt;(b_smem_stage_ptr, &amp;tmap_b, n_off, k_off_coremat, mbar_addr_tma_stage, CacheHintSm100::EVICT_NORMAL);
+            /*
+                Scale factors are stored in global memory in 4x4x32 chunks, i.e. 512B chunks where each chunk represents a
+                128x4 chunk of the SF matrix (in M or N xK)
+                So we calculate the offset in each dimension in terms of these 512B chunks:
+                k_off / 64 represents the number of 128x4 (512B) chunks along the K dimension which are contiguous (4 * SF_BLOCKS_SIZE = 64)
+                m/n_off / 128 represents the number of 512B chunks along the M dimension which are strided by K / 64 512B chunks
+            */
+            const uint8_t* sfa_g_ptr = sfa_gmem_base + ((k_off / 64) + (m_off / 128) * (K / 64)) * 512; // ISSUE: These could be just simple bit shifts, adjust if compiler doesn&#x27;t
+            const uint8_t* sfb_g_ptr = sfb_gmem_base + ((k_off / 64) + (n_off / 128) * (K / 64)) * 512;
+            tcgen05_1dtma_g2s_sf(sfa_smem_stage_ptr, sfa_g_ptr, SF_SMEM_TILESZ, mbar_addr_tma_stage, CacheHintSm100::EVICT_NORMAL);
+            tcgen05_1dtma_g2s_sf(sfb_smem_stage_ptr, sfb_g_ptr, SF_SMEM_TILESZ, mbar_addr_tma_stage, CacheHintSm100::EVICT_NORMAL);
+            if constexpr (TD_MMA_N == 256) {
+                tcgen05_1dtma_g2s_sf(sfb_smem_stage_ptr+SF_SMEM_TILESZ, sfb_g_ptr + (K / 64)*512, SF_SMEM_TILESZ, mbar_addr_tma_stage, CacheHintSm100::EVICT_NORMAL);
+            }
+            
+            // Signal in mbarrier that we expect SMEM_TILE_SZ bytes to arrive on this mbar object before proceeding to next phase
+            mbar_arrive_expect(mbar_addr_tma_stage, SMEM_TILE_SZ);
+        };
+
+        // Fill the TMA pipe
+        for (int stage = 0; stage &lt; PIPE_STAGES; stage++) {
+            tma_load_stage(stage * TD_SMEM_K, stage);
+        }
+
+        // Cycle through tile stages, loading tiles once no longer in use by the MMA stage
+        int stage = 0;
+        for (int k_off = TD_SMEM_K * PIPE_STAGES; k_off &lt; K; k_off += TD_SMEM_K) {
+            mbar_wait(mbar_addr_mma + stage * 8, (((k_off / TD_SMEM_K) / PIPE_STAGES) - 1) % 2);
+            tma_load_stage(k_off, stage);
+            stage = (stage + 1) % PIPE_STAGES;
+        }
+    }</code></pre>
+<p>We define a lambda function <code>tma_load_stage</code> which captures all references and takes in k_off (which is just k-iter * size of k-block) and stage (which determines which buffers in the software pipeline we are using for this k-iteration). In the lambda we find the corresponding buffers and mbarriers for the stage. Notice we also compute <code>k_off_coremat</code> which determines the offset of core matrix chunks along the k-dimension for the current k-iteration. Next we initiate the TMA transfers for A, B, SFA, and SFB using the following two functions: <code>tcgen05_3dtma_g2s_ab()</code> and <code>tcgen05_1dtma_g2s_sf()</code></p>
+<pre class="code"><code>__device__ void inline tcgen05_1dtma_g2s_sf(int dst, const void *src, int size, int mbar_addr, CacheHintSm100 cache_policy) {
+    asm volatile(
+        &quot;cp.async.bulk.shared::cta.global.mbarrier::complete_tx::bytes.L2::cache_hint [%0], [%1], %2, [%3], %4;&quot;
+        :
+        : &quot;r&quot;(dst), &quot;l&quot;(src), &quot;r&quot;(size), &quot;r&quot;(mbar_addr), &quot;l&quot;(cache_policy));
+}</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk</a></p>
+<pre class="code"><code>template&lt;int CTA_GROUP&gt;
+__device__ void inline tcgen05_3dtma_g2s_ab(int dst_smem, const void *tmap_ptr, int mn_off, int k_off_coremat, int mbar_addr, CacheHintSm100 cache_policy) {
+    asm volatile (
+        &quot;cp.async.bulk.tensor.3d.shared::cluster.global.mbarrier::complete_tx::bytes.cta_group::%0.L2::cache_hint [%1], [%2, {%3, %4, %5}], [%6], %7;&quot;
+        :
+        : &quot;n&quot;(CTA_GROUP), &quot;r&quot;(dst_smem), &quot;l&quot;(tmap_ptr), &quot;r&quot;(0), &quot;r&quot;(mn_off), &quot;r&quot;(k_off_coremat), &quot;r&quot;(mbar_addr), &quot;l&quot;(cache_policy)
+    );
+}</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#data-movement-and-conversion-instructions-cp-async-bulk-tensor</a></p>
+<p>We&#x27;ve discussed these instructions previously at a broad level, now we can dive into the technical details of how they work in the context of this kernel.</p>
+<p><code>cp.async.bulk.shared::cta.global.mbarrier::complete_tx::bytes.L2::cache_hint</code></p>
+<p>This instruction without the &quot;.tensor&quot; modifier performs a contiguous transfer of <code>size</code> bytes. The <code>.shared::cta.global</code> modifiers indicate we are copying from global memory into CTA local SMEM (as opposed to DSMEM). <code>mbarrier::complete_tx::bytes</code> indicates we are passing an mbarrier to which this transaction must report the number of bytes transferred upon completion (more details on this in the glossary). <code>L2::cache_hint</code> allows us to provide hints as to what data will be re-used or not. This way evictions can more intelligently optimize for temporal cache locality (see Cache Hint Details).</p>
+<p><code>cp.async.bulk.tensor.3d.shared::cluster.global.mbarrier::complete_tx::bytes.cta_group::%0.L2::cache_hint</code></p>
+<p>First refer to the <a class="xref" href="/projects/nvfp4/nvfp4_glossary.html">[TMA Details]</a> segment for an understanding of TMA descriptors and how these cp.async.bulk.tensor instructions interact with mbarriers. This instruction and wrapper assume we&#x27;ve properly setup a TMA descriptor for the data we are transferring. Most modifiers in the instruction serve the same purpose as the prior bulk transfer instruction. The main differences include <code>.3d</code> which indicates the tensor (or block of data) we are transferring has 3 dimensions and <code>shared::cluster</code> instead of <code>shared::cta</code> which means we are copying to DSMEM instead of SMEM. This instruction also allows using <code>shared::cta</code>; however, later we will find that using the cluster variant is useful for further optimizations, and when transferring to a single CTA instead of multiple CTAs DSMEM it effectively reduces to the same operation and no performance hit. The last difference for this tensor variant of TMA transfer is the addition of the <code>int mn_off</code> and <code>int k_off_coremat</code> fields.</p>
+<p>To understand those arguments we look at how the 3d transaction is structured by the tensor map (no-swizzle example):</p>
+<pre class="code"><code>constexpr uint32_t rank = 3;
+uint64_t dim_gmem[rank] = {32, mn_dim_gmem, k_dim_gmem/32};
+uint64_t stride_gmem[rank - 1] = {k_dim_gmem/2, 16};
+uint32_t dim_smem[rank] = {32, MN_SMEM_TD, K_SMEM_TD/32};</code></pre>
+<p>The three dimensions of our matrix in GMEM (<code>dim_gmem</code>) look like: {core matrix width, mn-dimension, number of core matrices along the k-dim}. Also embedded in the tensor map are the sizes along each dimension that we are copying to SMEM/DSMEM (<code>dim_smem</code>): {core matrix width, mn-block-dimension, number of core matrices along the k-block-dim}. We always copy the full width of the core matrix so dim_gmem<sup class="refnum">[0]</sup> always equals dim_smem<sup class="refnum">[0]</sup>, and the other two dimensions reflect the full GMEM dimensions vs the dimensions of a single load tile. Again for a more detailed description of this see <a class="xref" href="/projects/nvfp4/nvfp4_glossary.html">[TMA Details]</a>.</p>
+<p>Going back to the wrapper function <code>tcgen05_3dtma_g2s_ab</code> above we see that off the three offsets we pass, the first is always 0. This is because we never load a block starting somewhere in the middle of a core matrix. The argument <code>mn_off</code> determines how far along the mn_dim our tile is offset, and <code>k_off_coremat</code> determines how many &quot;chunks&quot; of core matrices the tile to be loaded is offset in GMEM (this is just the k offset divided by the core matrix width).</p>
+<p>One may wonder why we are allowed to use a contiguous transfer through <code>tcgen05_1dtma_g2s_sf</code> for the scale factors given they need to have that unusual 32x4x4 layout discussed in the previous section. Luckily one of the inputs to the kernel in this competition were separate scale factor tensors that had been rearraned into the required format, so they the oddly layed out tiles can just be loaded contiguously (See Data Layout section for further details). On this theme one quirk of this segment of code is the ugly <code>if constexpr (TD_MMA_N == 256)</code> statement, which is necessary when loading tiles of the SFB matrix when the N-dimension of the tile is 256. It&#x27;s the structure of the reformatted tensors that necessitates this double TMA issue because the tiles of 32x4x4 scale factors represent contiguous 128x4 tiles of the original scale factor tensors. That means 256x4 scale factor tiles are non-contiguous in both the standard scale factor tensors and the reformatted tensors. Another solution to this is to use a 2d transfer much in the same way we use a 3d transfer to achieve the core matrix structure for the nvfp4 data. That involves trade-offs that will be discussed in the upcoming kernels (TMA setup overhead, tensor bulk transfers sometimes take longer than a series of contiguous transfers, etc...).</p>
+<p>Once we&#x27;ve issued all of the data transfers for a k-block we need to ensure the mbarrier we are using for the current software pipeline stage is expecting the correct number of bytes. This will allow the mbarrier to signal to the MMA warp waiting on this data that it can proceed with computation once all data has arrived.</p>
+<pre class="code"><code>            // Signal in mbarrier that we expect SMEM_TILE_SZ bytes to arrive on this mbar object before proceeding to next phase
+            mbar_arrive_expect(mbar_addr_tma_stage, SMEM_TILE_SZ);</code></pre>
+<pre class="code"><code>__device__ inline void mbar_arrive_expect(const int mbar_addr, const int size) {
+    asm volatile(
+        &quot;mbarrier.arrive.expect_tx.release.cta.shared::cta.b64 _, [%0], %1;&quot;
+        :
+        : &quot;r&quot;(mbar_addr), &quot;r&quot;(size) 
+        : &quot;memory&quot;
+    );
+}</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-mbarrier-arrive" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-mbarrier-arrive</a></p>
+<p>See the <a class="xref" href="/projects/nvfp4/nvfp4_glossary.html">[Synchronization Details]</a> section for specifics on arrive-on and expect-tx sub-operations performed by the mbarrier.arrive PTX instruction. In short, mbarrier.arrive.exptect_tx tells the mbarrier to expect x number of bytes from the previously issued TMA transactions for this k-iteration where x is the total bytes in all tiles of A, B, SFA, and SFB.</p>
+<p>This completes the description of the lambda function. Now we can look at how it&#x27;s used in the k-loop by the TMA warp:</p>
+<pre class="code"><code>        // Fill the TMA pipe
+        for (int stage = 0; stage &lt; PIPE_STAGES; stage++) {
+            tma_load_stage(stage * TD_SMEM_K, stage);
+        }
+
+        // Cycle through tile stages, loading tiles once no longer in use by the MMA stage
+        int stage = 0;
+        for (int k_off = TD_SMEM_K * PIPE_STAGES; k_off &lt; K; k_off += TD_SMEM_K) {
+            mbar_wait(mbar_addr_mma + stage * 8, (((k_off / TD_SMEM_K) / PIPE_STAGES) - 1) % 2);
+            tma_load_stage(k_off, stage);
+            stage = (stage + 1) % PIPE_STAGES;
+        }</code></pre>
+<p>In the first loop we &quot;prime the pump&quot; and initiate loads for all software pipeline stages. As discussed in the previous section we don&#x27;t need to wait in this loop because we aren&#x27;t overwritting any meaningful data at the start of the k-loop, the data in SMEM is just garbage. This loop is also a large part of why a lambda function is used: to avoid a bunch of conditional code that makes the core logic hard to follow.</p>
+<p>In the second loop the only difference is now we need to execute <code>mbar_wait</code> before loading tiles for a k-iteration. This is because we could be overwriting data that is still being consumed by the MMA warp for computation. The mbarriers pointed to by <code>mbar_addr_mma</code> protect the producer (TMA warp) from overwriting data still in use by the consumer (MMA warp).</p>
+<pre class="code"><code>__device__ void mbar_wait(const int mbar_addr, const int phase) {
+    uint32_t ticks = 0x989680;  // expiration date for try wait to re-try, from CUTLASS
+    asm volatile(
+        &quot;{\\n&quot;
+        &quot;.reg .pred P1;\\n&quot;
+        &quot;LAB_WAIT:\\n&quot;
+        &quot;mbarrier.try_wait.parity.shared::cta.b64 P1, [%0], %1, %2;\\n&quot; // Acquire semantics assumed here
+        &quot;@P1 bra.uni DONE;\\n&quot; // Add .uni here because there won&#x27;t be warp divergence
+        &quot;bra.uni     LAB_WAIT;\\n&quot;
+        &quot;DONE:\\n&quot;
+        &quot;}&quot;
+        :
+        : &quot;r&quot;(mbar_addr), &quot;r&quot;(phase), &quot;r&quot;(ticks)
+    );
+}</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-mbarrier-test-wait-try-wait" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#parallel-synchronization-and-communication-instructions-mbarrier-test-wait-try-wait</a></p>
+<p>In the <a class="xref" href="/projects/nvfp4/nvfp4_glossary.html">[Synchronization Details]</a> section I discuss how mbarriers have a binary phase that threads can use to determine if they should wait or proceed. That phase only flips if the conditions of the mbarrier have been met (i.e. all threads have arrived on the barrier and all bytes for async transactions have also arrived). This wrapper function is essentially a spin-lock that checks if the barrier has flipped and the producer or consumer is free to continue execution for this software pipeline stage. The <code>try_wait</code> modifier indicates that this instruction can block the executing warp (as opposed to <code>test_wait</code> which is non-blocking). This is ideal for us because we want warps that are blocked to yield to other warps on the SM that can continue executing. This idea is similar to yielding threads in operating systems where we want to avoid threads spinning on a resource hogging CPU cycles and inserting bubbles into hardware compute pipelines.</p>
+<h2 id="mma-warp">- MMA Warp -</h2>
+<p>After kernel setup the pseudo-code for the MMA warp looks like this: =&gt; For k-iter in k-iterations:</p>
+<pre class="diagram">    =&gt; Wait until SMEM buffers in software pipeline slot (k-iter % N) have their data loaded by the TMA warp
+    =&gt; Copy scale factors from SMEM -&gt; TMEM
+    =&gt; Execute MMAs for this k-iter (accumulating in TMEM)</pre>
+<p>The actual code to implement this looks like the following:</p>
+<pre class="code"><code>    // MMA thread loops over SMEM tile stages, loads TMEM and computes MMA ops
+    else if (warp_id == MMA_WARP &amp;&amp; elect_one_sync()) {
+        for (int k_off = 0; k_off &lt; K; k_off += TD_SMEM_K) {
+            const int stage = (k_off / TD_SMEM_K) % PIPE_STAGES;
+            mbar_wait(mbar_addr_tma + stage * 8, ((k_off / TD_SMEM_K) / PIPE_STAGES) % 2);
+
+            const int a_smem_stage_ptr = a_smem_ptr + stage * A_SMEM_TILESZ;
+            const int b_smem_stage_ptr = b_smem_ptr + stage * B_SMEM_TILESZ;
+            const int sfa_smem_stage_ptr = sfa_smem_ptr + stage * SF_SMEM_TILESZ;
+            const int sfb_smem_stage_ptr = sfb_smem_ptr + stage * SF_SMEM_TILESZ  * (TD_MMA_N == 256 ? 2 : 1);
+            const int mbar_addr_mma_stage = mbar_addr_mma + stage * 8;
+
+            // Load scale factors SMEM -&gt; TMEM
+            for (int sub_k_iter = 0; sub_k_iter &lt; TD_SMEM_K / TD_MMA_K; sub_k_iter++) {
+                uint64_t sfa_desc = make_smem_desc&lt;0, false&gt;(sfa_smem_stage_ptr + (sub_k_iter * 512)); // ISSUE: verify this should input 0 here
+                uint64_t sfb_desc = make_smem_desc&lt;0, false&gt;(sfb_smem_stage_ptr + (sub_k_iter * 512));
+                tcgen05_cp&lt;1&gt;(tmem_addr_sfa + 4 * sub_k_iter, sfa_desc);
+                tcgen05_cp&lt;1&gt;(tmem_addr_sfb + MAX&lt;TD_MMA_N / 32, 4&gt;() * sub_k_iter, sfb_desc);
+                if constexpr (TD_MMA_N == 256) {
+                    uint64_t sfb_desc2 = make_smem_desc&lt;0, false&gt;(sfb_smem_stage_ptr + SF_SMEM_TILESZ + (sub_k_iter * 512));
+                    tcgen05_cp&lt;1&gt;(tmem_addr_sfb + 8 * sub_k_iter + 4, sfb_desc2);
+                }
+            }
+
+            // Loop over SMEM tile K-dim
+            for (int sub_k_iter = 0; sub_k_iter &lt; TD_SMEM_K / TD_MMA_K; sub_k_iter++) {
+                // Stride computed differently depending on swizzle mode because it changes core matrix shape
+                uint64_t a_desc, b_desc;
+                if constexpr (SWIZZLE) {
+                    a_desc = make_smem_desc&lt;TD_MMA_M, SWIZZLE&gt;(a_smem_stage_ptr + sub_k_iter * 32);
+                    b_desc = make_smem_desc&lt;TD_MMA_N, SWIZZLE&gt;(b_smem_stage_ptr + sub_k_iter * 32);
+                }
+                else {
+                    a_desc = make_smem_desc&lt;TD_MMA_M, SWIZZLE&gt;(a_smem_stage_ptr + sub_k_iter * TD_MMA_K * TD_MMA_M / 2);
+                    b_desc = make_smem_desc&lt;TD_MMA_N, SWIZZLE&gt;(b_smem_stage_ptr + sub_k_iter * TD_MMA_K * TD_MMA_N / 2);
+                }
+                int sfa_tmem = tmem_addr_sfa + 4 * sub_k_iter;
+                int sfb_tmem;
+                if constexpr (TD_MMA_N == 256) {
+                    sfb_tmem = tmem_addr_sfb + 8 * sub_k_iter;
+                } else {
+                    sfb_tmem = tmem_addr_sfb + 4 * sub_k_iter + (n_off%128)/32;
+                }
+
+                tcgen05_mma_nvfp4&lt;1&gt;(tmem_addr_result, a_desc, b_desc, make_instr_desc&lt;TD_MMA_M, TD_MMA_N&gt;(), sfa_tmem, sfb_tmem, k_off + sub_k_iter); // Inputting k_off like this will set enable-input-d so only on the first mma we 0 out the result space in TMEM
+            }
+            // signal MMA done
+            tcgen05_commit(mbar_addr_mma_stage);
+        }
+
+        // Signal epilogue to start
+        tcgen05_commit(mbar_addr_epi);
+    }</code></pre>
+<p>Since all of the code executed by the MMA warp is single thread execution we guard the entire block with <code>elect_one_sync()</code>.</p>
+<p>As the consumer warp we must first wait for the loads issued by the TMA warp for the current software pipeline stage to complete before proceeding with computation. Thus, we again use <code>mbar_wait</code> but this time on the mbarriers referenced via <code>mbar_addr_tma</code> which are used to prevent the consumemr warp (MMA) from using data before it has been produced (by the TMA warp).</p>
+<p>Next we setup our SMEM, TMEM, mbarrier pointers as we did in the TMA warp. Now we are ready to copy the scale factor data from SMEM to TMEM using <code>tcgen05_cp</code></p>
+<pre class="code"><code>// Copies 32 rows x 128 bits from matrix described in SMEM by desc
+// into tmem_ptr
+template&lt;int CTA_GROUP&gt;
+__device__ void inline tcgen05_cp(int tmem_ptr, uint64_t desc) {
+    asm volatile (
+        &quot;tcgen05.cp.cta_group::%2.32x128b.warpx4 [%0], %1;&quot;
+        :
+        : &quot;r&quot;(tmem_ptr), &quot;l&quot;(desc), &quot;n&quot;(CTA_GROUP)
+    );
+}</code></pre>
+<pre class="code"><code>tcgen05.cp.cta_group.shape{.multicast}{.dst_fmt.src_fmt} [taddr], s-desc;
+
+.cta_group = { .cta_group::1, .cta_group::2 }
+.src_fmt   = { .b6x16_p32 , .b4x16_p64 }
+.dst_fmt   = { .b8x16 }
+.shape     = { .128x256b, .4x256b, .128x128b, .64x128b**, .32x128b*** }
+.multicast = { .warpx2::02_13** , .warpx2::01_23**, .warpx4*** }</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-cp</a></p>
+<p>Instruction tcgen05.cp initiates an asynchronous copy operation from shared memory to the location specified by the address operand <code>taddr</code> in the Tensor Memory.</p>
+<p>This is where we need to start using matrix descriptors (described in the above sections).</p>
+<pre class="code"><code>// Complete descriptor with address info
+template&lt;int MN_DIM, bool SWIZZLE_128B = false&gt;
+__device__ uint64_t inline make_smem_desc(int smem_addr) {
+    constexpr uint64_t LBO = SWIZZLE_128B ? 1 : MN_DIM*16;
+    constexpr uint64_t SBO = SWIZZLE_128B ? 8 * 128 : 8 * 16;
+    constexpr uint64_t SWIZZLE_BITS = SWIZZLE_128B ? 2 : 0;
+    return encode(smem_addr) | (encode(LBO) &lt;&lt; 16) | (encode(SBO) &lt;&lt; 32) | (0x1ULL &lt;&lt; 46) | (SWIZZLE_BITS &lt;&lt; 61);
+}</code></pre>
+<p>This function encodes the fields into their associated bit positions.</p>
+<p><code>s-desc</code> is a matrix descriptor (the same kind as discussed previously); however, in this case we aren&#x27;t using any swizzling and we hardcode the LBO (Leading Byte Offset) to be 0. We don&#x27;t swizzle the scale factors for now because the benefit would be relatively small for the complexity of implementation (considering that scale factors make up only a small percentage of the overall data). LBO is 0 because for the tcgen05.cp instruction we are essentially copying one long column of core matrices. SBO stays the same for non-swizzled data.</p>
+<p>A logical next question would be: how does tcgen05.cp know how much data to copy? The answer lies in the <code>.shape</code> modifier which takes the form of <code>.{rows}x{bits}b</code> where <code>rows</code> is the number of TMEM rows being copied into and <code>bits</code> is the number of bits to copy into each row. There are a number of options; we choose <code>.32x128b</code> which means we&#x27;re copying 32 rows of 128bits each worth of data from SMEM (as a single column, which works because the data has already been reformatted as contiguous 32x4x4 chunks) into 32 rows of TMEM (across 128b / 32b per column = 4 columns). Another important field to touch on is the <code>.multicast</code> modifier. The value for that modifier will depend on the parameter chosen for <code>.shape</code> and it indicates how data will be replicated across rows of TMEM. Recall in an earlier section I briefly mentioned how data must sometimes be repeated across TMEM rows likely due to constraints imposed by hardware. We see this explicitly now as the <code>.multicast</code> qualifier indicates how many chunks of repeated data get copied into TMEM rows. For example, in our case we are required to use the .warpx4 modifier which indicates our data will be copied down 4 times across all rows of TMEM.</p>
+<p>We perform the scale factor copies in a loop the size of <code>TD_SMEM_K / TD_MMA_K</code>. <code>TD_SMEM_K</code> represents the size in the k-dimension of the TMA loaded tiles. <code>TD_MMA_K</code> represents the size of the k-dimension used in a single one of our MMA instructions. <code>TD_SMEM_K</code> must be a multiple of <code>TD_MMA_K</code>; however, we can experiment with the exact values to find the most optimal values for given problem shapes. <code>TD_MMA_K</code> can at it&#x27;s largest for the sm100a architecture (specific architecture for the Nvidia B200) be 64. Thus, if <code>TD_SMEM_K</code> is 256 each TMA loaded tile loads 4 tcgen05.mma instructions worth of data. Since each tcgen05.cp instruction loads the scale factors for one 32x4x4 block (or one 128x4 block if using the canonical dimensions) this means it loads the scale factors for a tile with k = 64 (since 4 scale factors spans 4*16 = 64 NVFP4 elements). In other words it loads the scale factors for a single mma. This requires us to loop through and call multiple tcgen05.cp instructions for each k=64 chunk of the loaded TMA tile.</p>
+<p>The second for loop iterates across the <code>TD_SMEM_K</code> width tiles loaded by the TMA warp in chunks of <code>TD_MMA_K</code> executing the tcgen05.mma on the data and accumulating the result in TMEM.</p>
+<pre class="code"><code>tcgen05_mma_nvfp4&lt;1&gt;(tmem_addr_result, a_desc, b_desc, make_instr_desc&lt;TD_MMA_M, TD_MMA_N&gt;(), sfa_tmem, sfb_tmem, k_off + sub_k_iter);</code></pre>
+<pre class="code"><code>// Single thread execution
+template&lt;int CTA_GROUP&gt;
+__device__ void inline tcgen05_mma_nvfp4(int d_tmem, uint64_t a_desc, uint64_t b_desc, uint32_t i_desc, 
+                                        int sfa_tmem, int sfb_tmem, int enable_input_d) {
+    asm volatile (
+        &quot;{\\n&quot;
+        &quot;.reg .pred p;\\n&quot;
+        &quot;setp.ne.b32 p, %4, 0;\\n&quot;
+        &quot;tcgen05.mma.cta_group::%7.kind::mxf4nvf4.block_scale.block16 [%0], %1, %2, %3, [%5], [%6], p; \\n&quot;
+        &quot;}\\n&quot;
+        :
+        : &quot;r&quot;(d_tmem), &quot;l&quot;(a_desc), &quot;l&quot;(b_desc), &quot;r&quot;(i_desc), &quot;r&quot;(enable_input_d),
+        &quot;r&quot;(sfa_tmem), &quot;r&quot;(sfb_tmem), &quot;n&quot;(CTA_GROUP)
+    );
+}</code></pre>
+<p>We pass in the TMEM address of our result, appropriately defined matrix descriptors for the A and B tiles in SMEM, the compile time defined instruction descriptor (discussed earlier), TMEM addresses of the appropriate scale factor chunks, and <code>k_off + sub_k_iter</code> which will set <code>enable_input_d</code> to zero out the TMEM result buffer on the first computation and accumulate thereafter. We don&#x27;t need to worry about tcgen05.mma instructions corrupting the results of previous tcgen05.mma instructions because hardware provides a guarantee of safety for sequential execution (hardware pipelining rules discussed earlier).</p>
+<p>One imporant aside is that accumulation happens in TMEM using FP32, so each result element takes the width of a full column in TMEM, and in the epilogue we need to convert these FP32 to FP16 values before storing the values to GMEM.</p>
+<p>Additionally, it makes sense to reiterate that the MMA shapes we can compute are limited by this table: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-kind-shapes," target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#tcgen05-kind-shapes,</a> which determines our choice of TD_MMA_M/N/K for the kernel, and those choices influence the various shapes and instruction variants used within the kernel.</p>
+<p>The last step in the MMA warp is to notify other warps when relevant MMAs have finished computing. We have to notify the TMA warp when we have finished consuming the data for a given software pipeline stage, and we need to notify the epilogue warps when all computation has finished and the results are ready to be consumed.</p>
+<p>In the TMA Warp section we discussed how after the first loop through the software pipeline the TMA warps must wait on the associated <code>mbar_addr_mma</code> mbarrier to ensure that data is safe to overwrite (not still being consumed by the MMA warp). This code is how we signal that mbarrier so TMA knows it can proceed:</p>
+<pre class="code"><code>// Signal epilogue to start
+tcgen05_commit(mbar_addr_mma_stage); </code></pre>
+<pre class="code"><code>__device__ void inline tcgen05_commit(const int mbar_addr) {
+    asm volatile(
+        &quot;tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::cluster.b64 [%0];&quot;
+        :
+        : &quot;r&quot;(mbar_addr) 
+        : &quot;memory&quot;
+    );
+}</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen-async-sync-operations-commit" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen-async-sync-operations-commit</a></p>
+<p>The instruction tcgen05.commit is an asynchronous instruction which makes the mbarrier object, specified by the address operand <code>mbar</code>, track the completion of all the prior asynchronous tcgen05 operations (including tcgen05.mma) initiated by the executing thread. Upon the completion of the tracked asynchronous tcgen05 operations, the mbarrier is signaled to complete (assuming the count of the mbarrier was initialized to one, which it always will be for this code. See Synchronization Details for more).</p>
+<p>At the end of each k-iteration we call <code>tcgen05_commit(mbar_addr_mma_stage);</code> to signal to the TMA Warp that the MMA warp is finished with the current pipeline stage and that data is safe to be overwritten.</p>
+<p>Once we&#x27;ve completed computation across all k-iterations and the result in TMEM is ready to be written back to GMEM we signal to the epilogue warp via <code>tcgen05_commit(mbar_addr_epi);</code> which as we will see in the next section allows the epilogue warps to proceed.</p>
+<h2 id="epilogue-warps">- Epilogue Warps -</h2>
+<p>After kernel setup the pseudo-code for the Epilogue warps looks like this: =&gt; Wait for MMA warp to complete computation for all k-iterations =&gt; Move results from TMEM to Regs to GMEM</p>
+<p>The code:</p>
+<pre class="code"><code>    // All warps aside from the two for TMA/MMA are dedicated to the epilogue
+    else if (warp_id &lt; NUM_WARPS - 2) {
+        mbar_wait(mbar_addr_epi, 0);
+        asm volatile(&quot;tcgen05.fence::after_thread_sync;&quot;);
+
+        // Load MMA into regs (TMEM -&gt; Regs)
+        // Each warp loads 16 rows per tcgen05_ld and we have 128 rows, with 4 warps each one is responsible for 32 rows
+        // Each thread
+        float results[TD_MMA_N / 2];
+        int rows_per_warp = TD_MMA_M / (NUM_WARPS - 2);
+        for (int sub_m = 0; sub_m &lt;  rows_per_warp / 16; sub_m++) {
+            if constexpr (TD_MMA_N == 256) {
+                tcgen05_ld&lt;16, 256, 32&gt;(results, tmem_addr_result + (((warp_id * rows_per_warp) + sub_m * 16) &lt;&lt; 16));
+            }
+            else if constexpr (TD_MMA_N == 128) {
+                tcgen05_ld&lt;16, 256, 16&gt;(results, tmem_addr_result + (((warp_id * rows_per_warp) + sub_m * 16) &lt;&lt; 16));
+            }
+            else if constexpr (TD_MMA_N == 64) {
+                tcgen05_ld&lt;16, 256, 8&gt;(results, tmem_addr_result + (((warp_id * rows_per_warp) + sub_m * 16) &lt;&lt; 16));
+            }
+            asm volatile(&quot;tcgen05.wait::ld.sync.aligned;&quot;);
+
+            // Post process and store from Regs to SMEM (Regs -&gt; SMEM)
+            // Transfer result from SMEM -&gt; GMEM (8 comes from 256/32 -&gt; 256b per ld block from above)
+            for (int i = 0; i &lt; TD_MMA_N / 8; i++) {
+                const int m_offset = m_off + warp_id * rows_per_warp + sub_m * 16 + lane_id / 4;
+                const int n_offset = n_off + i * 8 + (lane_id % 4) * 2;
+                reinterpret_cast&lt;half2 *&gt;(c_ref + (m_offset)*N + n_offset)[0] = __float22half2_rn({results[i * 4], results[i * 4 + 1]});
+                reinterpret_cast&lt;half2 *&gt;(c_ref + (m_offset + 8)*N + n_offset)[0] = __float22half2_rn({results[i * 4 + 2], results[i * 4 + 3]});
+            }
+        }</code></pre>
+<p>At the end of the previous section we saw how the MMA warp signals an mbarrier on which the epilogue warps are waiting once the computation phase is complete. The first step of the epilogue code is then to wait on this mbarrier with <code>mbar_wait(mbar_addr_epi, 0);</code>. This barrier only flips once so hard-coding the phase to 0 is fine (see Synchronization Details for more on mbarriers and phases).</p>
+<p>Next we insert a fence to enforce that the following tcgen05_ld calls are ordered strictly after all prior asynchronous tcgen05 instructions have completed: <code>asm volatile(&quot;tcgen05.fence::after_thread_sync;&quot;);</code></p>
+<p>The final block of code is what actually moves the data from TMEM into registers then to GMEM. To facilitate TMEM -&gt; Registers we need the tcgen05.ld instruction:</p>
+<p>This is a templated function so we can compile in different versions based on the compile time parameters chosen for our kernel. Below is just one example implementation.</p>
+<pre class="code"><code>template&lt;int LANES, int WIDTH, int REPT&gt;
+__device__ void inline tcgen05_ld(float* regs, int tmem_addr);</code></pre>
+<pre class="code"><code>template&lt;&gt;
+__device__ void inline tcgen05_ld&lt;16, 256, 16&gt;(float* regs, int tmem_addr) {
+    asm volatile (
+        &quot;tcgen05.ld.sync.aligned.16x256b.x16.b32 {    %0,  %1,  %2,  %3,  %4,  %5,  %6,  %7, &quot;
+                                                   &quot;  %8,  %9,  %10, %11, %12, %13, %14, %15, &quot;
+                                                   &quot;  %16, %17, %18, %19, %20, %21, %22, %23, &quot;
+                                                   &quot;  %24, %25, %26, %27, %28, %29, %30, %31, &quot;
+                                                   &quot;  %32, %33, %34, %35, %36, %37, %38, %39, &quot;
+                                                   &quot;  %40, %41, %42, %43, %44, %45, %46, %47, &quot;
+                                                   &quot;  %48, %49, %50, %51, %52, %53, %54, %55, &quot;
+                                                   &quot;  %56, %57, %58, %59, %60, %61, %62, %63}, [%64];&quot;
+        : &quot;=f&quot;(regs[0]),  &quot;=f&quot;(regs[1]),  &quot;=f&quot;(regs[2]),  &quot;=f&quot;(regs[3]),
+          &quot;=f&quot;(regs[4]),  &quot;=f&quot;(regs[5]),  &quot;=f&quot;(regs[6]),  &quot;=f&quot;(regs[7]),
+          &quot;=f&quot;(regs[8]),  &quot;=f&quot;(regs[9]),  &quot;=f&quot;(regs[10]), &quot;=f&quot;(regs[11]),
+          &quot;=f&quot;(regs[12]), &quot;=f&quot;(regs[13]), &quot;=f&quot;(regs[14]), &quot;=f&quot;(regs[15]),
+          &quot;=f&quot;(regs[16]), &quot;=f&quot;(regs[17]), &quot;=f&quot;(regs[18]), &quot;=f&quot;(regs[19]),
+          &quot;=f&quot;(regs[20]), &quot;=f&quot;(regs[21]), &quot;=f&quot;(regs[22]), &quot;=f&quot;(regs[23]),
+          &quot;=f&quot;(regs[24]), &quot;=f&quot;(regs[25]), &quot;=f&quot;(regs[26]), &quot;=f&quot;(regs[27]),
+          &quot;=f&quot;(regs[28]), &quot;=f&quot;(regs[29]), &quot;=f&quot;(regs[30]), &quot;=f&quot;(regs[31]),
+          &quot;=f&quot;(regs[32]), &quot;=f&quot;(regs[33]), &quot;=f&quot;(regs[34]), &quot;=f&quot;(regs[35]),
+          &quot;=f&quot;(regs[36]), &quot;=f&quot;(regs[37]), &quot;=f&quot;(regs[38]), &quot;=f&quot;(regs[39]),
+          &quot;=f&quot;(regs[40]), &quot;=f&quot;(regs[41]), &quot;=f&quot;(regs[42]), &quot;=f&quot;(regs[43]),
+          &quot;=f&quot;(regs[44]), &quot;=f&quot;(regs[45]), &quot;=f&quot;(regs[46]), &quot;=f&quot;(regs[47]),
+          &quot;=f&quot;(regs[48]), &quot;=f&quot;(regs[49]), &quot;=f&quot;(regs[50]), &quot;=f&quot;(regs[51]),
+          &quot;=f&quot;(regs[52]), &quot;=f&quot;(regs[53]), &quot;=f&quot;(regs[54]), &quot;=f&quot;(regs[55]),
+          &quot;=f&quot;(regs[56]), &quot;=f&quot;(regs[57]), &quot;=f&quot;(regs[58]), &quot;=f&quot;(regs[59]),
+          &quot;=f&quot;(regs[60]), &quot;=f&quot;(regs[61]), &quot;=f&quot;(regs[62]), &quot;=f&quot;(regs[63])
+        : &quot;r&quot;(tmem_addr)
+    );
+}</code></pre>
+<pre class="code"><code>tcgen05.ld.sync.aligned.shape1.num{.pack}.b32    r, [taddr];
+
+.shape1 = { .16x64b, .16x128b, .16x256b, .32x32b }
+.num    = { .x1, .x2, .x4, .x8, .x16, .x32, .x64, .x128 }
+.pack   = { .pack::16b }</code></pre>
+<p>PTX Link: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-ld" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-instructions-tcgen05-ld</a></p>
+<p>Instruction tcgen05.ld asynchronously loads data from the Tensor Memory at the location specified by the 32-bit address operand taddr into the destination register r, collectively across all threads of the warps. The .shape qualifier and the .num qualifier together determines the total dimension of the data which is loaded from the Tensor Memory. The .shape qualifier indicates the base dimension of data to be accessed. The .num qualifier indicates the repeat factor on the base dimension resulting in the total dimension of the data that is accessed.</p>
+<p>Sticking with the example we look at <code>.shape1</code> = <code>.16x256b</code> and <code>.num</code> = <code>.x16</code> which means load from tensor memory using the <code>.16x256b</code> structure repeated across the columns of TMEM 16 times. Below is the diagram which shows how a single warp loads data from TMEM into the registers of its threads for this shape:</p>
+<p>[Insert diagram from <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-matrix-fragments-shape-16256b" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-matrix-fragments-shape-16256b</a>]</p>
+<p>So each tcgen05.ld instruction executed by all threads in a warp loads 16 rows x 8 columns (this is where 16x256b comes from, 16 rows and 256b = 8, 32b width columns in TMEM). Then with the <code>.x16</code> modifier we end up loading 16 rows by 128 columns of TMEM for a single warp, with each thread holding 64 of the total 16*128 values in its registers. This is why we declare a local array of floats <code>float results[TD_MMA_N / 2];</code> to hold the results of the tcgen05.ld operation.</p>
+<p>There are different formats for tcgen05.ld which change the number of values per thread and the format of the load from TMEM. Those formats can be seen on the PTX docs where I sourced the above graphic: <a href="https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-matrix-fragments-shape-16256b" target="_blank" rel="noopener noreferrer">https://docs.nvidia.com/cuda/parallel-thread-execution/#tcgen05-matrix-fragments-shape-16256b</a></p>
+<p>In this particular case we have 4 warps which each load 16 rows from TMEM, but that&#x27;s only half of the rows in TMEM. For most of our kernels we choose the MMA M dimension to be 128 so we need to load all rows of TMEM into registers, which means we need a loop in case warps have to issue multiple tcgen05.ld instructions to load all 32 rows per warp and cover all 128 rows across the 4 epilogue warps:</p>
+<pre class="code"><code>for (int sub_m = 0; sub_m &lt;  rows_per_warp / 16; sub_m++) {</code></pre>
+<p>Next we need a fence to ensure the tcgen05.ld operations have completed before we convert the data to FP16 and store to GMEM:</p>
+<pre class="code"><code>asm volatile(&quot;tcgen05.wait::ld.sync.aligned;&quot;);</code></pre>
+<p>As discussed earlier this instruction specifically waits for those tcgen05.ld operations to complete.</p>
+<p>Then the final loop takes the values in the <code>results</code> registers and stores them to GMEM, in this case we store two FP16 values at a time for better store coalescence:</p>
+<pre class="code"><code>            for (int i = 0; i &lt; TD_MMA_N / 8; i++) {
+                const int m_offset = m_off + warp_id * rows_per_warp + sub_m * 16 + lane_id / 4;
+                const int n_offset = n_off + i * 8 + (lane_id % 4) * 2;
+                reinterpret_cast&lt;half2 *&gt;(c_ref + (m_offset)*N + n_offset)[0] = __float22half2_rn({results[i * 4], results[i * 4 + 1]});
+                reinterpret_cast&lt;half2 *&gt;(c_ref + (m_offset + 8)*N + n_offset)[0] = __float22half2_rn({results[i * 4 + 2], results[i * 4 + 3]});
+            }</code></pre>
+<p>In this GEMM section we covered how tcgen05 tensor cores and TMEM on the Blackwell architecture can accelerate matrix multiply, including the specifics of the PTX instructions used and basic algorithmic strategies and optimizations. This background will be key as all future kernels will derive from this basic GEMM kernel. Below I&#x27;ve included a list of resources that I used while learning about the Blackwell architecture and optimizing GEMM on GPUs.</p>
+<h3 id="gemm-summary">GEMM Summary</h3>
+<p>Unlike the GEMV section, this section doesn&#x27;t iterate through versioned kernels — the goal was to lay down the foundational tcgen05 / TMA / TMEM machinery that the next two kernels build on. The summary below is therefore organized by the building blocks introduced rather than by version.</p>
+<p>Pipeline Stage Summary:</p>
+<pre class="diagram">  ┌────────┬─────────────────┬──────────────────────────────────────┬─────────────────────────────────────────────────────────────┐
+  │ Stage  │     Action      │           PTX Instruction            │                            Notes                            │
+  ├────────┼─────────────────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────┤
+  │   0    │ GMEM -&gt; SMEM    │ cp.async.bulk.tensor.{2d,3d}         │ TMA load of A/B/SFA/SFB tiles, signals mbarrier on arrive   │
+  ├────────┼─────────────────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────┤
+  │   1    │ SMEM -&gt; TMEM    │ tcgen05.cp.cta_group::N.32x128b      │ SF tiles only; A/B stay in SMEM and are read by MMA via desc│
+  ├────────┼─────────────────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────┤
+  │   2    │ Compute         │ tcgen05.mma.kind::mxf4nvf4.block_sc. │ Issued by single thread, accumulates in TMEM (FP32)         │
+  ├────────┼─────────────────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────┤
+  │   3    │ TMEM -&gt; Regs    │ tcgen05.ld.sync.aligned.16x256b.xN   │ Warp-collective, requires 4 warps to cover M=128            │
+  ├────────┼─────────────────┼──────────────────────────────────────┼─────────────────────────────────────────────────────────────┤
+  │   4    │ Regs -&gt; GMEM    │ standard st.global / half2 stores    │ FP32 -&gt; FP16 conversion in registers before store           │
+  └────────┴─────────────────┴──────────────────────────────────────┴─────────────────────────────────────────────────────────────┘</pre>
+<p>Synchronization Primitives Summary:</p>
+<pre class="diagram">  ┌──────────────────────────────────┬──────────────────────────────────────────────────────────────────────────────────────────┐
+  │            Primitive             │                                  Where it&#x27;s used                                         │
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+  │ mbarrier (TMA)                   │ Producer (TMA warp) signals via expect_tx; consumer (MMA warp) waits before computing    │
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+  │ mbarrier (MMA-&gt;TMA back-edge)    │ Consumer signals when SMEM buffer is free; producer waits to avoid overwriting           │
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+  │ mbarrier (MMA-&gt;Epilogue)         │ Signaled via tcgen05.commit once all MMAs in k-loop have completed                       │
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+  │ tcgen05.fence::after_thread_sync │ Orders subsequent tcgen05 ops after prior async tcgen05 work (no reorder)                │
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+  │ tcgen05.wait::ld                 │ Blocks executing thread until prior tcgen05.ld ops complete (TMEM -&gt; Regs ready)        │
+  ├──────────────────────────────────┼──────────────────────────────────────────────────────────────────────────────────────────┤
+  │ elect_one_sync                   │ Picks one deterministic leader thread in a warp for single-thread PTX ops               │
+  └──────────────────────────────────┴──────────────────────────────────────────────────────────────────────────────────────────┘</pre>
+<p>Warp Specialization Summary (6-warp kernel, 192 threads):</p>
+<pre class="diagram">  ┌─────────────┬───────────────┬───────────────────────────────────────────────────────────────────────────────────────────────┐
+  │   Warps     │   Specialty   │                                          Work                                                 │
+  ├─────────────┼───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Warp 0      │ TMA           │ Issue TMA loads of A/B/SFA/SFB into stage-N SMEM buffers, wait on MMA back-edge mbar          │
+  ├─────────────┼───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Warp 1      │ MMA           │ tcgen05.cp scale factors SMEM-&gt;TMEM, tcgen05.mma to accumulate result, commit on completion   │
+  ├─────────────┼───────────────┼───────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ Warps 2-5   │ Epilogue      │ Wait for MMA, tcgen05.ld TMEM-&gt;Regs, convert FP32-&gt;FP16, store to GMEM (4 warps cover M=128)  │
+  └─────────────┴───────────────┴───────────────────────────────────────────────────────────────────────────────────────────────┘</pre>
+<p>Broad Lessons:</p>
+<p>The biggest mental shift relative to pre-tcgen05 GEMM kernels is that the thread is no longer the primary unit of compute. Most tcgen05 operations are issued by a single elected thread per warp, the actual work is performed asynchronously by dedicated hardware units (tensor cores, TMA engine, TMEM), and the warps&#x27; job becomes to orchestrate data flow and synchronization between those units. This makes warp specialization a natural fit and decouples how many threads to launch from how much arithmetic work needs to be done.</p>
+<p>The hardest part of this section to discover by reading the PTX docs alone was data layout — specifically the &quot;core matrix&quot; concept for SMEM tiles consumed by tcgen05.mma and the (32 x 4) x 4 repeated layout for scale factors in TMEM. Neither is named in the official documentation as a first-class concept (see 07_PTX_lessons.txt). The matrix descriptor&#x27;s LBO/SBO fields only make sense once the core matrix is understood.</p>
+<p>Synchronization correctness is the dominant source of non-deterministic (&quot;Heisen-&quot;) bugs in tcgen05 kernels. Producer-consumer mbarriers, fences, and waits must be matched to the exact data flow between the asynchronous units; the hardware does not protect against e.g. an MMA reading SF data that hasn&#x27;t been copied to TMEM yet or an epilogue reading TMEM before the last MMA committed.</p>
+<h3 id="links-and-further-reading">Links and Further Reading</h3>
+<p><sup class="refnum">[1]</sup> - Modular article <sup class="refnum">[2]</sup> - Explanation of Tensor Memory</p>
+        </article>
+        <nav class="pager">
+            <a class="pgprev" href="/projects/nvfp4/nvfp4_batched_gemv.html">← Batched GEMV</a>
+            <a class="pgnext" href="/projects/nvfp4/nvfp4_dual_gemm.html">Dual GEMM →</a>
+        </nav>
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span></p>
+        </div>
+    </main>
+</body>
+</html>

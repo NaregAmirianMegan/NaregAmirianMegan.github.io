@@ -1,0 +1,587 @@
+/* ============================================================
+   Nareg Megan — personal site
+   Palette: Midnight Indigo + Violet
+   ============================================================ */
+
+:root {
+    --bg:        #0f1020;
+    --bg-elev:   #16172a;
+    --bg-elev-2: #1a1b2e;
+    --text:      #dcdcec;
+    --muted:     #8888a8;
+    --accent:    #a78bfa;
+    --accent-2:  #7c8cff;
+    --border:    #2d2e44;
+    --code-bg:   #1a1b2e;
+    --code-text: #e7e7f5;
+    --mono: 'SFMono-Regular', 'JetBrains Mono', 'Fira Code', Menlo, Consolas, monospace;
+    --maxw: 720px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+    background-color: var(--bg);
+    background-image:
+        radial-gradient(900px 500px at 80% -10%, rgba(167, 139, 250, 0.10), transparent 60%),
+        radial-gradient(700px 500px at -10% 0%, rgba(124, 140, 255, 0.08), transparent 55%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- header / nav ---------- */
+
+header {
+    padding: 1.5rem 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+nav {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+}
+
+nav a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+nav a.name {
+    color: #ffffff;
+    font-size: 2.0rem;
+    font-weight: 600;
+    margin-right: 1rem;
+    letter-spacing: -0.01em;
+}
+
+nav.headernav {
+    display: flex;
+    justify-content: center;
+}
+
+nav a:hover { color: var(--accent); }
+
+nav a.name:hover { color: #ffffff; }
+
+/* ---------- layout ---------- */
+
+main {
+    max-width: var(--maxw);
+    padding: 2rem;
+    margin: 0 auto;
+}
+
+.content { margin-bottom: 3rem; }
+
+.content p {
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: var(--text);
+    padding-bottom: 30px;
+}
+
+.content h3 {
+    color: #ffffff;
+    font-size: 1.1rem;
+    font-weight: 300;
+    margin-bottom: 0.1rem;
+}
+.content h5 { color: var(--muted); font-weight: 500; margin-bottom: 0.6rem; }
+
+.content ul { margin: 0 0 30px 1.2rem; }
+.content li {
+    font-size: 0.95rem;
+    line-height: 1.8;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+}
+.content li:last-child { margin-bottom: 0; }
+.content li::marker { color: var(--accent); }
+
+.content a {
+    color: #ffffff;
+    font-size: 1.1rem;
+    font-weight: 300;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.content a:hover { color: var(--accent); }
+
+.desc { color: var(--muted) !important; }
+
+/* featured writeup entries on the projects page */
+.entry { padding-bottom: 30px; }
+.entry .title-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+.tag {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    position: relative;
+    top: -1px;
+}
+.entry .desc { padding-bottom: 0 !important; margin-top: 0.4rem; }
+.content a.readmore {
+    font-size: 0.85rem;
+    color: var(--accent);
+    display: inline-block;
+    margin-top: 0.5rem;
+}
+.content a.readmore:hover { color: #ffffff; }
+
+/* ---------- home hero / avatar ---------- */
+
+.hero {
+    margin-bottom: 2.5rem;
+}
+
+/* first paragraph sits beside the avatar; remaining text runs full width below */
+.intro-lead {
+    display: flex;
+    align-items: center;
+    gap: 1.8rem;
+}
+
+.intro-lead p { flex: 1; padding-bottom: 0; }
+
+.avatar {
+    flex: 0 0 auto;
+    width: 132px;
+    height: 132px;
+    border-radius: 50%;
+    background-color: var(--bg-elev-2);
+    background-image: url('media/prof_pic.png');
+    background-size: cover;
+    background-position: center;
+    border: 3px solid var(--accent);
+    box-shadow: 0 0 0 6px rgba(167, 139, 250, 0.12),
+                0 8px 30px rgba(0, 0, 0, 0.45);
+    position: relative;
+    overflow: hidden;
+}
+
+/* fallback initials shown until a real photo is dropped in */
+.avatar::after {
+    content: 'NM';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.6rem;
+    font-weight: 600;
+    color: var(--muted);
+    background: linear-gradient(150deg, var(--bg-elev), var(--bg-elev-2));
+    z-index: -1;
+}
+
+.hero .intro { font-size: 1.05rem; line-height: 1.75; }
+.hero .intro p + p { margin-top: 0.9rem; }
+
+/* small section label, styled after the mono .tag pill (sans the border) */
+.intro-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 1.6rem 0 0.6rem;
+}
+
+@media (max-width: 560px) {
+    .intro-lead { flex-direction: column-reverse; align-items: center; text-align: center; gap: 1.2rem; }
+    .avatar { width: 120px; height: 120px; }
+}
+
+/* ---------- footer links / contact ---------- */
+
+.contact {
+    display: flex;
+    justify-content: center;
+    color: var(--muted);
+    margin-top: 0.5rem;
+}
+
+.links {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 2.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+}
+
+.links a.text-link {
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.links a.text-link:hover { color: #ffffff; }
+
+/* social icons: SVGs are filled in the violet accent (#a78bfa) */
+.links a img {
+    display: inline-block;
+    opacity: 0.85;
+    transition: opacity 0.2s, transform 0.15s;
+}
+
+.links a:hover img {
+    opacity: 1;
+    transform: translateY(-1px);
+}
+
+/* ============================================================
+   Sidebar table of contents (pages with class .has-toc on main)
+   ============================================================ */
+
+/* widen main into a 2-column [rail | content] layout, content stays 720px */
+main.has-toc {
+    max-width: 1012px;
+    display: flex;
+    align-items: flex-start;
+    gap: 3rem;
+}
+
+.has-toc .page-col {
+    flex: 1;
+    min-width: 0;
+    max-width: var(--maxw);
+}
+
+.toc-rail {
+    position: sticky;
+    top: 2rem;
+    flex: 0 0 180px;
+    align-self: flex-start;
+}
+
+.toc-head {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.9rem;
+}
+
+.toc-nav { display: flex; flex-direction: column; gap: 0.55rem; }
+
+.toc-nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    border-left: 2px solid var(--border);
+    padding-left: 0.7rem;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+.toc-nav a:hover { color: var(--accent); border-left-color: var(--accent); }
+
+/* keep jumped-to sections clear of the top edge */
+.content [id] { scroll-margin-top: 1.5rem; }
+
+/* no room for the rail: hide it, content re-centers exactly as before */
+@media (max-width: 1012px) {
+    main.has-toc { display: block; max-width: var(--maxw); }
+    .toc-rail { display: none; }
+}
+
+/* ============================================================
+   Blog / long-form article styling
+   ============================================================ */
+
+.post h1 {
+    font-size: 1.9rem;
+    line-height: 1.25;
+    color: #ffffff;
+    letter-spacing: -0.015em;
+    margin-bottom: 0.4rem;
+}
+
+.post-meta {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 1.8rem;
+    padding-bottom: 1.2rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.post h2 {
+    font-size: 1.4rem;
+    color: #ffffff;
+    margin: 2.4rem 0 0.8rem;
+    padding-top: 0.4rem;
+}
+
+.post h3 {
+    font-size: 1.12rem;
+    color: var(--accent);
+    margin: 1.8rem 0 0.6rem;
+}
+
+.post h3.topic {
+    color: var(--accent-2);
+    border-left: 3px solid var(--accent-2);
+    padding-left: 0.7rem;
+}
+
+.post p {
+    font-size: 0.96rem;
+    line-height: 1.8;
+    margin-bottom: 1.1rem;
+    color: var(--text);
+}
+
+.post a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.35);
+    transition: color 0.2s, border-color 0.2s;
+    word-break: break-word;
+}
+
+.post a:hover { color: #ffffff; border-bottom-color: #ffffff; }
+
+/* inline code */
+.post code,
+.content code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    word-break: break-word;
+}
+
+/* fenced code blocks */
+pre.code, pre.data, pre.diagram {
+    font-family: var(--mono);
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    margin: 1.1rem 0;
+    overflow-x: auto;
+    font-size: 0.84rem;
+    line-height: 1.55;
+}
+
+pre.code {
+    border-left: 3px solid var(--accent);
+}
+
+pre.code code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    color: var(--code-text);
+}
+
+/* benchmark / shape data — subtler than code */
+pre.data {
+    color: #b9c0e0;
+    border-left: 3px solid var(--accent-2);
+    background: rgba(124, 140, 255, 0.06);
+}
+
+/* aligned diagrams / hierarchy listings */
+pre.diagram {
+    color: #c5c8e8;
+    background: var(--bg-elev);
+    border-style: dashed;
+}
+
+/* >> call-out notes */
+.post p.note {
+    background: var(--bg-elev);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 0.7rem 1rem;
+    margin: 0.7rem 0;
+    color: #cfd2ec;
+    font-size: 0.92rem;
+}
+
+/* --- aside callouts (between standalone ---) */
+.post aside.callout {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1.1rem;
+    margin: 1.1rem 0;
+}
+
+.post aside.callout p {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin: 0.6rem 0;
+}
+
+/* glossary cross-reference + reference numbers */
+.xref {
+    color: var(--muted);
+    font-size: 0.85em;
+    border-bottom: 1px dotted var(--muted);
+    white-space: nowrap;
+}
+.xref:hover { color: var(--accent); }
+
+sup.refnum { color: var(--accent-2); font-size: 0.72em; }
+sup.refnum:hover { color: var(--accent); }
+
+/* lists (global padding reset means we re-add indentation here) */
+.post ul, .post ol { margin: 0 0 1.1rem 1.5rem; }
+.post li { margin-bottom: 0.45rem; line-height: 1.75; font-size: 0.96rem; }
+.post li::marker { color: var(--accent); }
+
+/* ---------- LLM prompt / response exchange ---------- */
+
+.exchange { margin: 1.2rem 0; }
+
+.turn {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 0.8rem;
+}
+
+.turn .role {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+}
+
+.turn.user { border-left: 3px solid var(--accent-2); }
+.turn.user .role { color: var(--accent-2); background: rgba(124, 140, 255, 0.12); }
+
+.turn.assistant { border-left: 3px solid var(--accent); }
+.turn.assistant .role { color: var(--accent); background: rgba(167, 139, 250, 0.12); }
+
+.turn p { font-size: 0.92rem; margin-bottom: 0.6rem; }
+.turn p:last-child { margin-bottom: 0; }
+
+/* ---------- blog bar (back link + github) ---------- */
+
+.blogbar {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    font-size: 0.88rem;
+    margin-bottom: 1.6rem;
+}
+
+.blogbar.standalone { justify-content: flex-start; margin: 1.4rem 0 0.6rem; }
+
+.blogbar a {
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.blogbar a:hover { color: var(--accent); }
+
+/* ---------- prev / next pager ---------- */
+
+.pager {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 2.5rem 0 1rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--border);
+}
+
+.pager a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.92rem;
+    transition: color 0.2s;
+}
+
+.pager a:hover { color: #ffffff; }
+.pager .pgnext { margin-left: auto; text-align: right; }
+
+/* ---------- table of contents (blog index) ---------- */
+
+.toc { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1rem; }
+
+.toc-entry {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    text-decoration: none;
+    transition: border-color 0.2s, transform 0.15s, background 0.2s;
+}
+
+.toc-entry:hover {
+    border-color: var(--accent);
+    background: var(--bg-elev-2);
+    transform: translateY(-2px);
+}
+
+.toc-num {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    color: var(--accent);
+    font-weight: 600;
+    flex: 0 0 auto;
+}
+
+.toc-body { display: flex; flex-direction: column; gap: 0.25rem; }
+.toc-title { color: #ffffff; font-size: 1.05rem; font-weight: 500; }
+.toc-desc { color: var(--muted); font-size: 0.88rem; line-height: 1.55; }
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 600px) {
+    header { padding: 1.2rem 1.2rem; }
+    main { padding: 1.4rem; }
+    nav { gap: 1.1rem; }
+    nav a.name { font-size: 1.6rem; }
+    .post h1 { font-size: 1.55rem; }
+    .post h2 { font-size: 1.25rem; }
+    pre.code, pre.data, pre.diagram { font-size: 0.78rem; }
+}

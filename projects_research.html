@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nareg Amirian Megan</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <nav class="headernav">
+            <a href="/index.html" class="name">Nareg Amirian Megan</a>
+            <a href="/experience_education.html">Experience/Education</a>
+            <a href="/projects_research.html">Projects/Research</a>
+            <a href="/random.html">Random</a>
+        </nav>
+    </header>
+
+    <main class="has-toc">
+        <aside class="toc-rail">
+            <nav class="toc-nav">
+                <span class="toc-head">On this page</span>
+                <a href="#proj-nvfp4">NVFP4 Kernel Deep Dive</a>
+                <a href="#proj-anthropic">Anthropic Takehome</a>
+                <a href="#proj-sme2">SME2 BLAS Library</a>
+                <a href="#proj-hft">HFT Verilog Generator</a>
+                <a href="#proj-oss">Open Source</a>
+                <a href="#proj-ml">ML Projects</a>
+            </nav>
+        </aside>
+
+        <div class="page-col">
+        <section class="content">
+            <div class="entry" id="proj-nvfp4">
+                <div class="title-row">
+                    <a href="/projects/nvfp4/nvfp4_blog.html">Deep Dive into ML Kernel Design on NVIDIA Blackwell</a>
+                    <span class="tag">Writeup</span>
+                </div>
+                <p class="desc">
+                    A detailed, multi-part walkthrough of designing and optimizing machine-learning kernels for the NVIDIA Blackwell architecture around the new NVFP4 4-bit data type. This revolved around an NVIDIA hosted competition, ranking the best performing kernels. It covers four kernel families — Batched GEMV, GEMM, Dual GEMM, and Group GEMM — from naive baselines through aggressive tcgen05 / TMA optimization, plus a standalone glossary of the hardware concepts involved and a distilled set of PTX / hardware lessons the official docs leave out.
+                </p>
+                <a class="readmore" href="/projects/nvfp4/nvfp4_blog.html">Read the series →</a>
+            </div>
+
+            <div class="entry" id="proj-anthropic">
+                <div class="title-row">
+                    <a href="/anthropic_takehome.html">Breaking 970 Cycles on Anthropic's Performance Takehome</a>
+                    <span class="tag">Writeup</span>
+                </div>
+                <p class="desc">
+                    Notes on optimizing a tree-traversal kernel for a simulated VLIW SIMD machine — and, more broadly, on programming and optimizing alongside LLMs: how to handle model over-certainty and sycophancy, when to separate concept from implementation, and how appealing to a third-party authority can knock a model out of a local minimum.
+                </p>
+                <a class="readmore" href="/anthropic_takehome.html">Read the writeup →</a>
+            </div>
+
+            <a href="https://github.com/NaregAmirianMegan/SME2_GEMM" id="proj-sme2" target="_blank" rel="noopener noreferrer">SME2 BLAS library using compiler intrinsics</a>
+            <p class="desc">
+                SME2/SSVE (Scalable Matrix Extension / Streaming Scalable Vector Extension) are newer hardware features on ARM processor architectures, so there isn't a ton of support for hardware specific high performance operations (particularly BLAS operations, which this hardware is designed to target). This project attempts to implement BLAS routines specifically for SME2/SSVE using intrinsics provided by the Clang compiler.
+            </p>
+
+            <a href="https://github.com/NaregAmirianMegan/hft-verilog-generator" id="proj-hft" target="_blank" rel="noopener noreferrer">Verilog generator for HFT algorithms</a>
+            <p class="desc">
+                High Frequency Trading and quantitative trading relies largely on the speed of decision making and execution. FPGAs can be used to create task specific hardware and replicate that hardware thousands of times over, allowing for highly efficient and parallelized computation. In this project I wrote a Verilog generator. When given a json file which describes mathematical rules for executing trades the generator creates both the hardware description and a test bench which can be used to virtually run the hardware using Icarus.
+            </p>
+
+            <a href="https://github.com/NaregAmirianMegan" id="proj-oss" target="_blank" rel="noopener noreferrer">Open Source Contributions</a>
+            <p class="desc">
+                Updates Pending...
+            </p>
+
+            <a href="https://github.com/callaunchpad" id="proj-ml" target="_blank" rel="noopener noreferrer">Some Machine Learning Projects</a>
+            <p class="desc">
+                Studying emergent behavior between competing RL Agents: <br><a href="https://github.com/callaunchpad/emergence" target="_blank" style="font-size: 0.9rem;">https://github.com/callaunchpad/emergence</a> <br>
+                Experimenting with various methods for a Visual Q&A system (from K-nearest to DNNs): <br><a href="https://github.com/callaunchpad/Musecage" target="_blank" style="font-size: 0.9rem;">https://github.com/callaunchpad/Musecage</a><br>
+                I wrote a very simple neural network library in Java: <br><a href="https://github.com/NaregAmirianMegan/Artificial-Neural-Network" target="_blank" style="font-size: 0.9rem;">https://github.com/NaregAmirianMegan/Artificial-Neural-Network</a><br>
+                Ancestry mapping using Markov Chains: <br><a href="https://github.com/callaunchpad/LocalAncestry" target="_blank" style="font-size: 0.9rem;">https://github.com/callaunchpad/LocalAncestry</a><br>
+                Atari Breakout Agent: <br><a href="https://github.com/NaregAmirianMegan/atari-breakout-ML" target="_blank" style="font-size: 0.9rem;">https://github.com/NaregAmirianMegan/atari-breakout-ML</a>
+            </p>
+
+        </section>
+
+
+        <div class="links">
+            <a href="https://github.com/NaregAmirianMegan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/github_logo.svg" alt="GitHub" width="28" height="28" />
+            </a>
+            <a href="https://linkedin.com/in/nareg-megan" target="_blank" rel="noopener noreferrer">
+                <img src="/media/linkedin_logo.svg" alt="LinkedIn" width="28" height="28" />
+            </a>
+            <a href="/media/NaregAmirianMegan_Resume_2025.pdf" target="_blank" class="text-link"><b>Preview Resume</b></a>
+        </div>
+        <div class="contact">
+            <p>
+                Reach me at <span style="color: var(--accent);">naregmegan@gmail.com</span>
+            </p>
+        </div>
+        </div>
+    </main>
+</body>
+</html>
