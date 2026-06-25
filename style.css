@@ -158,14 +158,16 @@ main {
     margin-bottom: 2.5rem;
 }
 
-/* first paragraph sits beside the avatar; remaining text runs full width below */
+/* "Hello!" + first paragraph sit beside the avatar; remaining text runs full width below */
 .intro-lead {
     display: flex;
     align-items: center;
     gap: 1.8rem;
 }
 
-.intro-lead p { flex: 1; padding-bottom: 0; }
+.intro-lead-text { flex: 1; min-width: 0; }
+.intro-lead-text .intro-label { margin-top: 0; }
+.intro-lead p { padding-bottom: 0; }
 
 .avatar {
     flex: 0 0 auto;
@@ -213,8 +215,9 @@ main {
 }
 
 @media (max-width: 560px) {
-    .intro-lead { flex-direction: column-reverse; align-items: center; text-align: center; gap: 1.2rem; }
-    .avatar { width: 120px; height: 120px; }
+    /* stack avatar on top as a profile header, with "Hello!" + intro below */
+    .intro-lead { flex-direction: column-reverse; align-items: stretch; gap: 1.4rem; }
+    .avatar { width: 120px; height: 120px; align-self: center; }
 }
 
 /* ---------- footer links / contact ---------- */
